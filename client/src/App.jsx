@@ -334,9 +334,18 @@ export default function App() {
   };
 
   const handleToggleRetention = (targetPlayerId) => {
-    socket.emit("toggle_retention_player", { playerId: targetPlayerId, roomCode: room?.code, playerId }, (res) => {
-      if (res?.error) alert(res.error);
-    });
+    socket.emit(
+      "toggle_retention_player",
+      {
+        targetPlayerId,
+        userPlayerId: playerId,
+        playerId,
+        roomCode: room?.code
+      },
+      (res) => {
+        if (res?.error) alert(res.error);
+      }
+    );
   };
 
   const handleLockRetentions = () => {

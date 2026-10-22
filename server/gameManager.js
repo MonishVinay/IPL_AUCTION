@@ -289,6 +289,8 @@ class GameManager {
   }
 
   toggleRetentionPlayer(socketId, targetPlayerId, roomCode = null, playerId = null) {
+    if (!targetPlayerId) return { error: "Player ID missing" };
+
     const info = this.ensurePlayerInRoom(socketId, roomCode, playerId);
     if (!info) return { error: "Not in room. Please reload to reconnect." };
 

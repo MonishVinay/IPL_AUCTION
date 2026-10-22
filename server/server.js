@@ -146,9 +146,13 @@ io.on("connection", (socket) => {
   });
 
   // 6. Toggle Retention Player
-  socket.on("toggle_retention_player", ({ playerId: targetPlayerId, roomCode, playerId }, callback) => {
+  socket.on("toggle_retention_player", (data, callback) => {
     try {
-      const result = gameManager.toggleRetentionPlayer(socket.id, targetPlayerId, roomCode, playerId);
+      const targetPlayerId = data?.targetPlayerId || (data?.playerId && data?.playerId !== data?.userPlayerId ? data?.playerId : null);
+      const userPlayerId = data?.userPlayerId || (data?.targetPlayerId ? data?.playerId : null);
+      const roomCode = data?.roomCode;
+
+      const result = gameManager.toggleRetentionPlayer(socket.id, targetPlayerId, roomCode, userPlayerId);
       if (result.error) {
         if (typeof callback === "function") callback(result);
         return;
