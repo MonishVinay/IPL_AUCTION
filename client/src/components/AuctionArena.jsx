@@ -90,10 +90,12 @@ export default function AuctionArena({
         <div className="text-center hidden md:block">
           <div className="text-[11px] font-bold uppercase tracking-wider text-amber-400 flex items-center justify-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5" />
-            <span>IPL LIVE MEGA AUCTION</span>
+            <span>{room.currentPool ? `${room.currentPool.name} [${room.currentPool.code}]` : "IPL LIVE MEGA AUCTION"}</span>
           </div>
           <div className="text-xs text-slate-400 mt-0.5">
-            Player {room.currentIndex + 1} of {room.totalPlayers} • Sold: {room.soldCount} • Unsold: {room.unsoldPoolCount}
+            {room.currentPool
+              ? `Pool Player ${(room.currentPoolPlayerIndex || 0) + 1} of ${room.currentPool.players?.length || 1} • Sold: ${room.soldCount || 0} • Unsold: ${room.unsoldPoolCount || 0}`
+              : `Player ${room.currentIndex + 1} of ${room.totalPlayers} • Sold: ${room.soldCount || 0}`}
           </div>
         </div>
 

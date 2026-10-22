@@ -1,7 +1,9 @@
 import React, { useState } from "react";
 import { SQUADS } from "../squadsData";
 import { getTeam } from "../teamsData";
-import { Shield, Check, Lock, DollarSign, Users, Sparkles, Filter } from "lucide-react";
+import { Shield, Check, Lock, DollarSign, Users, Sparkles, Filter, Info, Trash2 } from "lucide-react";
+
+const RETENTION_SLABS = [18.0, 14.0, 11.0, 18.0, 14.0, 4.0];
 
 export default function RetentionPhase({
   room,
@@ -32,7 +34,21 @@ export default function RetentionPhase({
     return true;
   });
 
-  const retainedIds = new Set(myTeamState.retained.map((r) => r.id));
+  const retainedMap = new Map();
+  myTeamState.retained.forEach((r, idx) => {
+    const cost = r.cost !== undefined
+      ? r.cost
+      : room.settings.retentionMode === "flat"
+      ? room.settings.flatRetentionCost
+      : (RETENTION_SLABS[idx] || 4.0);
+    retainedMap.set(r.id, { ...r, cost, slotNumber: idx + 1 });
+  });
+
+  const currentCount = myTeamState.retained.length;
+  const maxRetentions = room.settings.maxRetentions;
+  const nextSlotCost = room.settings.retentionMode === "flat"
+    ? room.settings.flatRetentionCost
+    : (RETENTION_SLABS[currentCount] || 4.0);
 
   // Role pill color helper
   const getRoleBadge = (role) => {
@@ -66,7 +82,7 @@ export default function RetentionPhase({
               </span>
             </div>
             <p className="text-xs text-slate-400">
-              Select up to {room.settings.maxRetentions} players from your original squad to retain before the mega auction.
+              Select up to {maxRetentions} players. Each retention slot has an official slab cost deducted from your purse.
             </p>
           </div>
         </div>
@@ -75,16 +91,23 @@ export default function RetentionPhase({
         <div className="flex items-center gap-3">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl px-4 py-2.5 flex items-center gap-3">
             <div>
-              <div className="text-[11px] text-slate-400 font-medium">Remaining Purse</div>
+              <div className="text-[11px] text-slate-400 font-medium">Purse Remaining</div>
               <div className="text-xl font-extrabold text-amber-400">
                 ₹{myTeamState.purse.toFixed(2)} Cr
               </div>
             </div>
             <div className="h-8 w-px bg-slate-800" />
             <div>
+              <div className="text-[11px] text-slate-400 font-medium">Total Deducted</div>
+              <div className="text-xl font-extrabold text-rose-400">
+                -₹{Number(myTeamState.spent || 0).toFixed(2)} Cr
+              </div>
+            </div>
+            <div className="h-8 w-px bg-slate-800" />
+            <div>
               <div className="text-[11px] text-slate-400 font-medium">Retained</div>
               <div className="text-xl font-extrabold text-white">
-                {myTeamState.retained.length} / {room.settings.maxRetentions}
+                {currentCount} / {maxRetentions}
               </div>
             </div>
           </div>
@@ -113,8 +136,45 @@ export default function RetentionPhase({
         </div>
       </header>
 
+      {/* Retention Slabs Price Guide Bar */}
+      <div className="max-w-6xl w-full mx-auto my-4 p-3 bg-slate-900/60 rounded-2xl border border-slate-800 flex items-center justify-between flex-wrap gap-2 text-xs">
+        <div className="flex items-center gap-2 text-slate-300 font-semibold">
+          <Info className="w-4 h-4 text-amber-400 shrink-0" />
+          <span>Retention Cost Slabs:</span>
+        </div>
+        <div className="flex items-center gap-2 overflow-x-auto text-[11px]">
+          {room.settings.retentionMode === "flat" ? (
+            <span className="px-3 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 font-bold">
+              Flat ₹{room.settings.flatRetentionCost} Cr per retained player
+            </span>
+          ) : (
+            [
+              { slot: 1, cost: 18 },
+              { slot: 2, cost: 14 },
+              { slot: 3, cost: 11 },
+              { slot: 4, cost: 18 },
+              { slot: 5, cost: 14 },
+              { slot: 6, cost: 4 }
+            ].slice(0, maxRetentions).map((s) => (
+              <span
+                key={s.slot}
+                className={`px-2.5 py-1 rounded-lg border font-mono transition ${
+                  currentCount === s.slot - 1
+                    ? "bg-amber-400 text-slate-950 font-black border-amber-400 shadow-md"
+                    : currentCount >= s.slot
+                    ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                    : "bg-slate-950 text-slate-400 border-slate-800"
+                }`}
+              >
+                Slot {s.slot}: ₹{s.cost} Cr
+              </span>
+            ))
+          )}
+        </div>
+      </div>
+
       {/* Main Grid */}
-      <main className="max-w-6xl w-full mx-auto grid grid-cols-1 lg:grid-cols-4 gap-8 py-8 flex-1">
+      <main className="max-w-6xl w-full mx-auto grid grid-cols-1 lg:grid-cols-4 gap-8 py-4 flex-1">
         {/* Left 3 Cols: Squad Players to Retain */}
         <div className="lg:col-span-3 space-y-4">
           {/* Filter Bar */}
@@ -147,60 +207,86 @@ export default function RetentionPhase({
           </div>
 
           {/* Player Cards Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
             {filteredPlayers.map((player) => {
-              const isRetained = retainedIds.has(player.id);
+              const retainedData = retainedMap.get(player.id);
+              const isRetained = !!retainedData;
+
               return (
                 <div
                   key={player.id}
                   onClick={() => {
                     if (!isLocked) onToggleRetention(player.id);
                   }}
-                  className={`relative p-4 rounded-2xl border transition-all cursor-pointer ${
+                  className={`relative p-4 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between ${
                     isRetained
-                      ? "bg-amber-500/10 border-amber-400 ring-1 ring-amber-400 shadow-lg shadow-amber-500/5"
-                      : "bg-slate-900/60 hover:bg-slate-900 border-slate-800"
-                  } ${isLocked ? "cursor-default opacity-80" : ""}`}
+                      ? "bg-amber-500/15 border-amber-400 ring-2 ring-amber-400/80 shadow-xl shadow-amber-500/10 scale-[1.01]"
+                      : "bg-slate-900/70 hover:bg-slate-900 border-slate-800 hover:border-slate-700"
+                  } ${isLocked ? "cursor-default opacity-85" : ""}`}
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <div className="font-bold text-white text-base leading-tight">
-                        {player.name}
+                  <div>
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="font-extrabold text-white text-base leading-tight">
+                          {player.name}
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-1.5">
+                          {getRoleBadge(player.role)}
+                          {player.isOverseas ? (
+                            <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-sky-500/20 text-sky-400">
+                              ✈️ OS
+                            </span>
+                          ) : (
+                            <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-orange-500/20 text-orange-400">
+                              🇮🇳 IND
+                            </span>
+                          )}
+                          {player.isKeyPlayer && (
+                            <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-yellow-500/20 text-yellow-300">
+                              ★ Key
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1.5 mt-1.5">
-                        {getRoleBadge(player.role)}
-                        {player.isOverseas ? (
-                          <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-sky-500/20 text-sky-400">
-                            ✈️ OS
-                          </span>
-                        ) : (
-                          <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-orange-500/20 text-orange-400">
-                            🇮🇳 IND
-                          </span>
-                        )}
-                        {player.isKeyPlayer && (
-                          <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-yellow-500/20 text-yellow-300">
-                            ★ Key
-                          </span>
-                        )}
-                      </div>
-                    </div>
 
-                    {/* Checkbox indicator */}
-                    <div
-                      className={`w-6 h-6 rounded-lg flex items-center justify-center border transition ${
-                        isRetained
-                          ? "bg-amber-400 border-amber-400 text-slate-950 font-black"
-                          : "border-slate-700 bg-slate-950 text-transparent"
-                      }`}
-                    >
-                      <Check className="w-4 h-4 stroke-[3]" />
+                      {/* Checkbox indicator */}
+                      <div
+                        className={`w-6 h-6 rounded-lg flex items-center justify-center border transition ${
+                          isRetained
+                            ? "bg-amber-400 border-amber-400 text-slate-950 font-black"
+                            : "border-slate-700 bg-slate-950 text-transparent"
+                        }`}
+                      >
+                        <Check className="w-4 h-4 stroke-[3]" />
+                      </div>
                     </div>
                   </div>
 
-                  <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs">
-                    <span className="text-slate-400">Rating: <b className="text-slate-200">{player.rating}</b></span>
-                    <span className="text-amber-400 font-semibold">Base: ₹{player.basePrice} Cr</span>
+                  {/* COST BREAKDOWN FOOTER ON CARD */}
+                  <div className="mt-4 pt-3 border-t border-slate-800/80">
+                    {isRetained ? (
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="px-2 py-0.5 rounded-md font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                          Slot #{retainedData.slotNumber}
+                        </span>
+                        <div className="font-mono font-black text-rose-400 text-sm">
+                          -₹{retainedData.cost.toFixed(2)} Cr
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-400 text-[11px]">
+                          Rating: <b className="text-slate-200">{player.rating}</b>
+                        </span>
+                        {currentCount < maxRetentions ? (
+                          <span className="text-amber-400/90 font-semibold text-[11px]">
+                            Costs: <b className="text-amber-400 font-mono">₹{nextSlotCost.toFixed(2)} Cr</b>
+                          </span>
+                        ) : (
+                          <span className="text-slate-500 text-[11px] italic">Max retained</span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -208,39 +294,109 @@ export default function RetentionPhase({
           </div>
         </div>
 
-        {/* Right Col: League Status & Locked Franchises */}
+        {/* Right Col: Itemized Retention Bill & Other Franchises */}
         <div className="space-y-6">
-          <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 space-y-4">
+          {/* Active Retention Bill */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-white text-sm flex items-center gap-2">
+                <DollarSign className="w-4 h-4 text-amber-400" />
+                <span>Your Retention Bill</span>
+              </h3>
+              <span className="text-xs text-amber-400 font-bold">
+                {currentCount} / {maxRetentions}
+              </span>
+            </div>
+
+            {myTeamState.retained.length === 0 ? (
+              <div className="p-4 bg-slate-950/70 rounded-xl border border-dashed border-slate-800 text-center text-xs text-slate-500">
+                No players selected yet. Click any player above to retain them.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {myTeamState.retained.map((r, idx) => {
+                  const cost = r.cost !== undefined
+                    ? r.cost
+                    : room.settings.retentionMode === "flat"
+                    ? room.settings.flatRetentionCost
+                    : (RETENTION_SLABS[idx] || 4.0);
+                  return (
+                    <div
+                      key={r.id}
+                      className="p-2.5 bg-slate-950/80 rounded-xl border border-slate-800 flex items-center justify-between text-xs"
+                    >
+                      <div>
+                        <div className="font-bold text-white flex items-center gap-1.5">
+                          <span className="text-[10px] text-amber-400 font-mono">#{idx + 1}</span>
+                          <span>{r.name}</span>
+                        </div>
+                        <div className="text-[10px] text-slate-500">{r.role}</div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-rose-400">
+                          -₹{Number(cost).toFixed(2)} Cr
+                        </span>
+                        {!isLocked && (
+                          <button
+                            onClick={() => onToggleRetention(r.id)}
+                            className="p-1 rounded text-slate-500 hover:text-rose-400 transition"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-xs">
+                  <span className="font-semibold text-slate-400">Total Retention Deduction:</span>
+                  <span className="font-mono font-black text-rose-400 text-sm">
+                    -₹{Number(myTeamState.spent || 0).toFixed(2)} Cr
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs pb-1">
+                  <span className="font-semibold text-slate-400">Remaining Auction Purse:</span>
+                  <span className="font-mono font-black text-amber-400 text-sm">
+                    ₹{Number(myTeamState.purse || 0).toFixed(2)} Cr
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Franchise Status */}
+          <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 space-y-3">
             <h3 className="font-bold text-white text-sm flex items-center gap-2">
-              <Users className="w-4 h-4 text-amber-400" />
-              <span>Franchise Retention Status</span>
+              <Users className="w-4 h-4 text-blue-400" />
+              <span>Franchise Lock Status</span>
             </h3>
 
-            <div className="space-y-2.5">
+            <div className="space-y-2">
               {room.players.map((p) => {
                 const team = getTeam(p.teamId);
                 const tState = room.teamsState[p.teamId] || { retained: [] };
                 return (
                   <div
                     key={p.id}
-                    className="p-3 bg-slate-950/70 rounded-xl border border-slate-800 flex items-center justify-between text-xs"
+                    className="p-2.5 bg-slate-950/70 rounded-xl border border-slate-800 flex items-center justify-between text-xs"
                   >
                     <div className="flex items-center gap-2">
-                      <span className="text-lg">{team.logoEmoji}</span>
+                      <span className="text-base">{team.logoEmoji}</span>
                       <div>
                         <div className="font-bold text-white">{team.shortName}</div>
-                        <div className="text-[11px] text-slate-400">{p.name}</div>
+                        <div className="text-[10px] text-slate-400">{p.name}</div>
                       </div>
                     </div>
 
                     <div>
                       {p.retentionsLocked ? (
-                        <span className="px-2 py-1 rounded-md text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
                           <Check className="w-3 h-3" />
                           <span>Locked ({tState.retained.length})</span>
                         </span>
                       ) : (
-                        <span className="px-2 py-1 rounded-md text-[10px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
                           Choosing ({tState.retained.length})...
                         </span>
                       )}
@@ -248,10 +404,6 @@ export default function RetentionPhase({
                   </div>
                 );
               })}
-            </div>
-
-            <div className="pt-2 text-xs text-slate-400 text-center">
-              The Mega Auction will begin automatically as soon as all managers lock their retentions.
             </div>
           </div>
         </div>

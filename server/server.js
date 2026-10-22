@@ -199,6 +199,16 @@ io.on("connection", (socket) => {
     }
   });
 
+  // 13. Skip Pool Preview (Host only)
+  socket.on("skip_pool_preview", (callback) => {
+    try {
+      const result = gameManager.skipPoolPreview(socket.id);
+      if (typeof callback === "function") callback(result);
+    } catch (err) {
+      if (typeof callback === "function") callback({ error: err.message });
+    }
+  });
+
   // Disconnect
   socket.on("disconnect", () => {
     gameManager.handleDisconnect(socket.id);

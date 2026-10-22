@@ -5,6 +5,7 @@ import Lobby from "./components/Lobby";
 import SettingsModal from "./components/SettingsModal";
 import RetentionPhase from "./components/RetentionPhase";
 import AuctionArena from "./components/AuctionArena";
+import PoolPreview from "./components/PoolPreview";
 import RTMModal from "./components/RTMModal";
 import PlayingXIBuilder from "./components/PlayingXIBuilder";
 
@@ -23,6 +24,32 @@ export default function App() {
     // 2. Game Phase Changed
     socket.on("game_phase_changed", ({ room }) => {
       setRoom(room);
+    });
+
+    // 2b. Pool Preview Started
+    socket.on("pool_preview_started", (data) => {
+      setRoom((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          status: "POOL_PREVIEW",
+          currentPool: data.pool,
+          currentPoolIndex: data.poolIndex,
+          poolPreviewTimeLeft: data.timeLeft
+        };
+      });
+      sounds.playGavel();
+    });
+
+    // 2c. Pool Preview Tick
+    socket.on("pool_preview_tick", ({ timeLeft }) => {
+      setRoom((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          poolPreviewTimeLeft: timeLeft
+        };
+      });
     });
 
     // 3. Player Presented in Auction
@@ -159,6 +186,8 @@ export default function App() {
     return () => {
       socket.off("room_updated");
       socket.off("game_phase_changed");
+      socket.off("pool_preview_started");
+      socket.off("pool_preview_tick");
       socket.off("player_presented");
       socket.off("bid_updated");
       socket.off("timer_tick");
@@ -247,6 +276,12 @@ export default function App() {
     });
   };
 
+  const handleSkipPoolPreview = () => {
+    socket.emit("skip_pool_preview", (res) => {
+      if (res?.error) alert(res.error);
+    });
+  };
+
   const toggleSound = () => {
     const next = sounds.toggle();
     setSoundEnabled(next);
@@ -283,6 +318,21 @@ export default function App() {
         playerId={playerId}
         onToggleRetention={handleToggleRetention}
         onLockRetentions={handleLockRetentions}
+      />
+    );
+  }
+
+  if (room.status === "POOL_PREVIEW") {
+    const myPlayer = room.players.find((p) => p.id === playerId);
+    return (
+      <PoolPreview
+        pool={room.currentPool}
+        poolIndex={room.currentPoolIndex}
+        totalPools={room.pools?.length || 1}
+        timeLeft={room.poolPreviewTimeLeft}
+        pools={room.pools}
+        isHost={myPlayer?.isHost}
+        onSkipPreview={handleSkipPoolPreview}
       />
     );
   }
