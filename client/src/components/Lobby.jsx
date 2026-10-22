@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { TEAMS } from "../teamsData";
-import { Users, Copy, Check, Play, Settings, Shield, Award, Sparkles, AlertCircle } from "lucide-react";
+import { Users, Copy, Check, Play, Settings, Shield, Award, Sparkles, AlertCircle, LogOut } from "lucide-react";
 
 export default function Lobby({
   room,
@@ -9,7 +9,8 @@ export default function Lobby({
   onStartGame,
   onOpenSettings,
   onCreateRoom,
-  onJoinRoom
+  onJoinRoom,
+  onLeaveRoom
 }) {
   const [copied, setCopied] = useState(false);
   const [hostNameInput, setHostNameInput] = useState("");
@@ -234,6 +235,21 @@ export default function Lobby({
             >
               <Settings className="w-4 h-4 text-amber-400" />
               <span>Rules & Purse</span>
+            </button>
+          )}
+
+          {onLeaveRoom && (
+            <button
+              onClick={() => {
+                if (window.confirm("Leave this room?")) {
+                  onLeaveRoom();
+                }
+              }}
+              title="Leave Room"
+              className="flex items-center gap-1.5 px-3 py-2.5 bg-red-950/40 hover:bg-red-900/60 border border-red-800/50 rounded-xl text-sm font-semibold text-red-300 transition"
+            >
+              <LogOut className="w-4 h-4 text-red-400" />
+              <span className="hidden sm:inline">Leave</span>
             </button>
           )}
         </div>

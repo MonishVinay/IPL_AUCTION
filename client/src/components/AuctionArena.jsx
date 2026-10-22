@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { getTeam } from "../teamsData";
 import BiddingControls from "./BiddingControls";
 import SquadDrawer from "./SquadDrawer";
-import { Volume2, VolumeX, Users, Clock, Award, Shield, DollarSign, Sparkles } from "lucide-react";
+import { Volume2, VolumeX, Users, Clock, Award, Shield, DollarSign, Sparkles, LogOut } from "lucide-react";
 
 export default function AuctionArena({
   room,
@@ -10,6 +10,7 @@ export default function AuctionArena({
   onPlaceBid,
   onPassTurn,
   onSkipPlayer,
+  onLeaveRoom,
   soundEnabled,
   onToggleSound
 }) {
@@ -116,6 +117,20 @@ export default function AuctionArena({
           >
             {soundEnabled ? <Volume2 className="w-4 h-4 text-amber-400" /> : <VolumeX className="w-4 h-4 text-slate-500" />}
           </button>
+
+          {onLeaveRoom && (
+            <button
+              onClick={() => {
+                if (window.confirm("Are you sure you want to exit the live auction?")) {
+                  onLeaveRoom();
+                }
+              }}
+              title="Leave Room"
+              className="p-2 bg-slate-900 hover:bg-red-950/40 border border-slate-800 hover:border-red-800/50 rounded-xl text-slate-400 hover:text-red-300 transition"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </header>
 

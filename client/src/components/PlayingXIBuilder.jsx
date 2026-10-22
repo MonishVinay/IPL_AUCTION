@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from "react";
 import confetti from "canvas-confetti";
 import { getTeam } from "../teamsData";
-import { Trophy, Award, Users, Shield, RefreshCw, Check, AlertCircle, Sparkles } from "lucide-react";
+import { Trophy, Award, Users, Shield, RefreshCw, Check, AlertCircle, Sparkles, LogOut } from "lucide-react";
 
 export default function PlayingXIBuilder({
   room,
   playerId,
-  onReAuctionUnsold
+  onReAuctionUnsold,
+  onLeaveRoom
 }) {
   const [selectedXI, setSelectedXI] = useState([]);
   const [activeTab, setActiveTab] = useState("LEADERBOARD"); // "LEADERBOARD", "PLAYING_XI"
@@ -119,6 +120,20 @@ export default function PlayingXIBuilder({
             >
               <RefreshCw className="w-3.5 h-3.5" />
               <span>Re-Auction {room.unsoldPoolCount} Unsold</span>
+            </button>
+          )}
+
+          {onLeaveRoom && (
+            <button
+              onClick={() => {
+                if (window.confirm("Exit this auction room and return to home?")) {
+                  onLeaveRoom();
+                }
+              }}
+              className="px-4 py-2.5 rounded-xl font-bold text-xs bg-red-950/40 hover:bg-red-900/60 text-red-300 border border-red-800/50 transition flex items-center gap-1.5"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Exit Room</span>
             </button>
           )}
         </div>

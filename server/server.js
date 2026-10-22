@@ -74,10 +74,36 @@ io.on("connection", (socket) => {
     }
   });
 
-  // 3. Team Selection
-  socket.on("select_team", ({ teamId }, callback) => {
+  // 2b. Reconnect Player (from localStorage or network drop)
+  socket.on("reconnect_player", ({ roomCode, playerId }, callback) => {
     try {
-      const result = gameManager.selectTeam(socket.id, teamId);
+      const result = gameManager.reconnectPlayer(socket.id, roomCode, playerId);
+      if (result.error) {
+        if (typeof callback === "function") callback(result);
+        return;
+      }
+      socket.join(result.roomCode);
+      io.to(result.roomCode).emit("player_reconnected", { playerId, playerName: result.playerName });
+      if (typeof callback === "function") callback({ success: true, ...result });
+    } catch (err) {
+      if (typeof callback === "function") callback({ error: err.message });
+    }
+  });
+
+  // 2c. Explicit Leave Room
+  socket.on("leave_room", (callback) => {
+    try {
+      const result = gameManager.leaveRoom(socket.id);
+      if (typeof callback === "function") callback(result);
+    } catch (err) {
+      if (typeof callback === "function") callback({ error: err.message });
+    }
+  });
+
+  // 3. Team Selection
+  socket.on("select_team", ({ teamId, roomCode, playerId }, callback) => {
+    try {
+      const result = gameManager.selectTeam(socket.id, teamId, roomCode, playerId);
       if (result.error) {
         if (typeof callback === "function") callback(result);
         return;
@@ -90,9 +116,9 @@ io.on("connection", (socket) => {
   });
 
   // 4. Update Game Settings
-  socket.on("update_settings", (newSettings, callback) => {
+  socket.on("update_settings", ({ newSettings, roomCode, playerId }, callback) => {
     try {
-      const result = gameManager.updateSettings(socket.id, newSettings);
+      const result = gameManager.updateSettings(socket.id, newSettings, roomCode, playerId);
       if (result.error) {
         if (typeof callback === "function") callback(result);
         return;
@@ -105,9 +131,9 @@ io.on("connection", (socket) => {
   });
 
   // 5. Start Retention Phase
-  socket.on("start_game", (callback) => {
+  socket.on("start_game", ({ roomCode, playerId } = {}, callback) => {
     try {
-      const result = gameManager.startRetentionPhase(socket.id);
+      const result = gameManager.startRetentionPhase(socket.id, roomCode, playerId);
       if (result.error) {
         if (typeof callback === "function") callback(result);
         return;
@@ -120,9 +146,9 @@ io.on("connection", (socket) => {
   });
 
   // 6. Toggle Retention Player
-  socket.on("toggle_retention_player", ({ playerId }, callback) => {
+  socket.on("toggle_retention_player", ({ playerId: targetPlayerId, roomCode, playerId }, callback) => {
     try {
-      const result = gameManager.toggleRetentionPlayer(socket.id, playerId);
+      const result = gameManager.toggleRetentionPlayer(socket.id, targetPlayerId, roomCode, playerId);
       if (result.error) {
         if (typeof callback === "function") callback(result);
         return;
@@ -135,9 +161,9 @@ io.on("connection", (socket) => {
   });
 
   // 7. Lock Retentions
-  socket.on("lock_retentions", (callback) => {
+  socket.on("lock_retentions", ({ roomCode, playerId } = {}, callback) => {
     try {
-      const result = gameManager.lockRetentions(socket.id);
+      const result = gameManager.lockRetentions(socket.id, roomCode, playerId);
       if (result.error) {
         if (typeof callback === "function") callback(result);
         return;
@@ -149,10 +175,10 @@ io.on("connection", (socket) => {
     }
   });
 
-  // 8. Place Bid
-  socket.on("place_bid", ({ customAmount } = {}, callback) => {
+  // 8. Place Bid (with self-healing fallback)
+  socket.on("place_bid", ({ customAmount, roomCode, playerId } = {}, callback) => {
     try {
-      const result = gameManager.placeBid(socket.id, customAmount);
+      const result = gameManager.placeBid(socket.id, customAmount, roomCode, playerId);
       if (typeof callback === "function") callback(result);
     } catch (err) {
       if (typeof callback === "function") callback({ error: err.message });
@@ -160,9 +186,9 @@ io.on("connection", (socket) => {
   });
 
   // 9. Pass / Fold Current Player
-  socket.on("pass_turn", (callback) => {
+  socket.on("pass_turn", ({ roomCode, playerId } = {}, callback) => {
     try {
-      const result = gameManager.passTurn(socket.id);
+      const result = gameManager.passTurn(socket.id, roomCode, playerId);
       if (typeof callback === "function") callback(result);
     } catch (err) {
       if (typeof callback === "function") callback({ error: err.message });
@@ -170,9 +196,9 @@ io.on("connection", (socket) => {
   });
 
   // 10. Respond to RTM challenge
-  socket.on("respond_rtm", ({ exerciseRTM }, callback) => {
+  socket.on("respond_rtm", ({ exerciseRTM, roomCode, playerId }, callback) => {
     try {
-      const result = gameManager.respondRTM(socket.id, exerciseRTM);
+      const result = gameManager.respondRTM(socket.id, exerciseRTM, roomCode, playerId);
       if (typeof callback === "function") callback(result);
     } catch (err) {
       if (typeof callback === "function") callback({ error: err.message });
@@ -180,9 +206,9 @@ io.on("connection", (socket) => {
   });
 
   // 11. Skip Player (Host only)
-  socket.on("skip_player", (callback) => {
+  socket.on("skip_player", ({ roomCode, playerId } = {}, callback) => {
     try {
-      const result = gameManager.skipCurrentPlayer(socket.id);
+      const result = gameManager.skipCurrentPlayer(socket.id, roomCode, playerId);
       if (typeof callback === "function") callback(result);
     } catch (err) {
       if (typeof callback === "function") callback({ error: err.message });
@@ -190,9 +216,9 @@ io.on("connection", (socket) => {
   });
 
   // 12. Re-auction Unsold (Host only)
-  socket.on("re_auction_unsold", (callback) => {
+  socket.on("re_auction_unsold", ({ roomCode, playerId } = {}, callback) => {
     try {
-      const result = gameManager.reAuctionUnsold(socket.id);
+      const result = gameManager.reAuctionUnsold(socket.id, roomCode, playerId);
       if (typeof callback === "function") callback(result);
     } catch (err) {
       if (typeof callback === "function") callback({ error: err.message });
@@ -200,9 +226,9 @@ io.on("connection", (socket) => {
   });
 
   // 13. Skip Pool Preview (Host only)
-  socket.on("skip_pool_preview", (callback) => {
+  socket.on("skip_pool_preview", ({ roomCode, playerId } = {}, callback) => {
     try {
-      const result = gameManager.skipPoolPreview(socket.id);
+      const result = gameManager.skipPoolPreview(socket.id, roomCode, playerId);
       if (typeof callback === "function") callback(result);
     } catch (err) {
       if (typeof callback === "function") callback({ error: err.message });

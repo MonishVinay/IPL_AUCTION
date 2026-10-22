@@ -39,8 +39,8 @@ class GameManager {
         maxSquad: 25,
         maxOverseas: 8,
         includeBonusPlayers: true,
-        bidTimerSeconds: 20, // Increased default timer for better tactical play
-        antiSnipeSeconds: 8, // Reset timer to at least 8s if bid comes under 8s
+        bidTimerSeconds: 20,
+        antiSnipeSeconds: 8,
         poolPreviewSeconds: 8
       },
       players: [
@@ -50,7 +50,8 @@ class GameManager {
           socketId: hostSocketId,
           isHost: true,
           teamId: null, // chosen franchise
-          retentionsLocked: false
+          retentionsLocked: false,
+          isConnected: true
         }
       ],
       teamsState: {}, // teamId -> { purse, spent, squad: [], retained: [], rtmCardsLeft: 0 }
@@ -101,7 +102,8 @@ class GameManager {
       socketId,
       isHost: false,
       teamId: null,
-      retentionsLocked: false
+      retentionsLocked: false,
+      isConnected: true
     };
 
     room.players.push(newPlayer);
@@ -109,9 +111,88 @@ class GameManager {
     return { roomCode: code, playerId, room: this.getSanitizedRoom(room) };
   }
 
-  selectTeam(socketId, teamId) {
+  reconnectPlayer(socketId, roomCode, playerId) {
+    if (!roomCode || !playerId) {
+      return { error: "Missing room code or player ID" };
+    }
+    const code = roomCode.toUpperCase().trim();
+    const room = this.rooms.get(code);
+
+    if (!room) {
+      return { error: "Room not found or auction ended." };
+    }
+
+    const player = room.players.find((p) => p.id === playerId);
+    if (!player) {
+      return { error: "Player not found in this room." };
+    }
+
+    // Unmap previous socketId if any
+    if (player.socketId && player.socketId !== socketId) {
+      this.playerSockets.delete(player.socketId);
+    }
+
+    player.socketId = socketId;
+    player.isConnected = true;
+    this.playerSockets.set(socketId, { roomCode: code, playerId });
+
+    return {
+      success: true,
+      roomCode: code,
+      playerId,
+      playerName: player.name,
+      teamId: player.teamId,
+      room: this.getSanitizedRoom(room)
+    };
+  }
+
+  ensurePlayerInRoom(socketId, roomCode = null, playerId = null) {
+    let info = this.playerSockets.get(socketId);
+    if (!info && roomCode && playerId) {
+      const rec = this.reconnectPlayer(socketId, roomCode, playerId);
+      if (rec.success) {
+        info = { roomCode: rec.roomCode, playerId: rec.playerId };
+      }
+    }
+    return info;
+  }
+
+  leaveRoom(socketId) {
     const info = this.playerSockets.get(socketId);
-    if (!info) return { error: "Not in a room" };
+    if (!info) return { success: true };
+
+    const room = this.rooms.get(info.roomCode);
+    this.playerSockets.delete(socketId);
+
+    if (!room) return { success: true };
+
+    const playerIndex = room.players.findIndex((p) => p.id === info.playerId);
+    if (playerIndex >= 0) {
+      const player = room.players[playerIndex];
+
+      if (room.status === "LOBBY") {
+        room.players.splice(playerIndex, 1);
+        if (player.isHost && room.players.length > 0) {
+          room.players[0].isHost = true;
+          room.hostId = room.players[0].id;
+        }
+        if (room.players.length === 0) {
+          this.clearRoomTimer(room);
+          this.rooms.delete(info.roomCode);
+          return { success: true };
+        }
+        this.io.to(room.code).emit("player_left", {
+          playerId: player.id,
+          room: this.getSanitizedRoom(room)
+        });
+      }
+    }
+    return { success: true };
+  }
+
+  selectTeam(socketId, teamId, roomCode = null, playerId = null) {
+    const info = this.ensurePlayerInRoom(socketId, roomCode, playerId);
+    if (!info) return { error: "Not in room. Please reload to reconnect." };
 
     const room = this.rooms.get(info.roomCode);
     if (!room || room.status !== "LOBBY") return { error: "Cannot change team now" };
@@ -128,9 +209,9 @@ class GameManager {
     return { success: true, room: this.getSanitizedRoom(room) };
   }
 
-  updateSettings(socketId, newSettings) {
-    const info = this.playerSockets.get(socketId);
-    if (!info) return { error: "Not in a room" };
+  updateSettings(socketId, newSettings, roomCode = null, playerId = null) {
+    const info = this.ensurePlayerInRoom(socketId, roomCode, playerId);
+    if (!info) return { error: "Not in room. Please reload to reconnect." };
 
     const room = this.rooms.get(info.roomCode);
     if (!room || room.status !== "LOBBY") return { error: "Cannot modify settings now" };
@@ -170,9 +251,9 @@ class GameManager {
     return total;
   }
 
-  startRetentionPhase(socketId) {
-    const info = this.playerSockets.get(socketId);
-    if (!info) return { error: "Not in a room" };
+  startRetentionPhase(socketId, roomCode = null, playerId = null) {
+    const info = this.ensurePlayerInRoom(socketId, roomCode, playerId);
+    if (!info) return { error: "Not in room. Please reload to reconnect." };
 
     const room = this.rooms.get(info.roomCode);
     if (!room || room.status !== "LOBBY") return { error: "Game already started" };
@@ -207,9 +288,9 @@ class GameManager {
     return { success: true, room: this.getSanitizedRoom(room) };
   }
 
-  toggleRetentionPlayer(socketId, playerId) {
-    const info = this.playerSockets.get(socketId);
-    if (!info) return { error: "Not in room" };
+  toggleRetentionPlayer(socketId, targetPlayerId, roomCode = null, playerId = null) {
+    const info = this.ensurePlayerInRoom(socketId, roomCode, playerId);
+    if (!info) return { error: "Not in room. Please reload to reconnect." };
 
     const room = this.rooms.get(info.roomCode);
     if (!room || room.status !== "RETENTION") return { error: "Not in retention phase" };
@@ -219,10 +300,10 @@ class GameManager {
     if (player.retentionsLocked) return { error: "Your retentions are already locked" };
 
     const teamState = room.teamsState[player.teamId];
-    const playerRecord = SQUADS.find((s) => s.id === playerId && s.originalTeamId === player.teamId);
+    const playerRecord = SQUADS.find((s) => s.id === targetPlayerId && s.originalTeamId === player.teamId);
     if (!playerRecord) return { error: "Player does not belong to your original franchise" };
 
-    const idx = teamState.retained.findIndex((r) => r.id === playerId);
+    const idx = teamState.retained.findIndex((r) => r.id === targetPlayerId);
     if (idx >= 0) {
       teamState.retained.splice(idx, 1);
     } else {
@@ -245,9 +326,9 @@ class GameManager {
     return { success: true, room: this.getSanitizedRoom(room) };
   }
 
-  lockRetentions(socketId) {
-    const info = this.playerSockets.get(socketId);
-    if (!info) return { error: "Not in room" };
+  lockRetentions(socketId, roomCode = null, playerId = null) {
+    const info = this.ensurePlayerInRoom(socketId, roomCode, playerId);
+    if (!info) return { error: "Not in room. Please reload to reconnect." };
 
     const room = this.rooms.get(info.roomCode);
     if (!room || room.status !== "RETENTION") return { error: "Not in retention phase" };
@@ -276,10 +357,9 @@ class GameManager {
       t.retained.forEach((r) => retainedIds.add(r.id));
     });
 
-    // 1. All squad players that are not retained
     let pool = SQUADS.filter((player) => !retainedIds.has(player.id));
 
-    // Global de-duplication registry: guarantees NO player appears in more than 1 pool
+    // Global registry guarantees each player appears in exactly one pool
     const seenIds = new Set();
     const takeUnique = (list) => {
       const result = [];
@@ -294,26 +374,12 @@ class GameManager {
 
     const shuffle = (arr) => arr.sort(() => Math.random() - 0.5);
 
-    // Build real IPL Auction Sets:
-    // Set 1: Marquee Superstars (M1) — Key players from squads
     const marquee = pool.filter((p) => p.isKeyPlayer);
-
-    // Set 2: Capped Batters (BA1)
     const cappedBatters = pool.filter((p) => !p.isKeyPlayer && p.role === "BAT" && p.basePrice >= 1.0);
-
-    // Set 3: Capped Wicketkeepers (WK1)
     const cappedKeepers = pool.filter((p) => !p.isKeyPlayer && p.role === "WK" && p.basePrice >= 1.0);
-
-    // Set 4: Capped All-Rounders (AL1)
     const cappedAllrounders = pool.filter((p) => !p.isKeyPlayer && p.role === "ALL" && p.basePrice >= 1.0);
-
-    // Set 5: Capped Fast Bowlers (FA1)
     const cappedPacers = pool.filter((p) => !p.isKeyPlayer && p.role === "PACE" && p.basePrice >= 1.0);
-
-    // Set 6: Capped Spinners (SP1)
     const cappedSpinners = pool.filter((p) => !p.isKeyPlayer && p.role === "SPIN" && p.basePrice >= 1.0);
-
-    // Set 7: Uncapped Talents (UNCAP)
     const uncapped = pool.filter((p) => !p.isKeyPlayer && p.basePrice < 1.0);
 
     const rawSets = [
@@ -368,7 +434,6 @@ class GameManager {
       }
     ];
 
-    // Optional Bonus Pool (STAR)
     if (room.settings.includeBonusPlayers && BONUS_PLAYERS.length > 0) {
       rawSets.push({
         id: "set_star",
@@ -425,8 +490,8 @@ class GameManager {
     }, 1000);
   }
 
-  skipPoolPreview(socketId) {
-    const info = this.playerSockets.get(socketId);
+  skipPoolPreview(socketId, roomCode = null, playerId = null) {
+    const info = this.ensurePlayerInRoom(socketId, roomCode, playerId);
     if (!info) return { error: "Not in room" };
     const room = this.rooms.get(info.roomCode);
     if (!room || room.status !== "POOL_PREVIEW") return { error: "Not in pool preview" };
@@ -463,7 +528,7 @@ class GameManager {
     room.currentBid = 0;
     room.currentBidder = null;
     room.bidHistory = [];
-    room.passedTeams = []; // Reset passed list for new player
+    room.passedTeams = [];
     room.timeLeft = room.settings.bidTimerSeconds;
     room.status = "AUCTION";
     room.rtmState = null;
@@ -479,9 +544,9 @@ class GameManager {
     return 1.00;
   }
 
-  placeBid(socketId, customAmount = null) {
-    const info = this.playerSockets.get(socketId);
-    if (!info) return { error: "Not in room" };
+  placeBid(socketId, customAmount = null, roomCode = null, playerId = null) {
+    const info = this.ensurePlayerInRoom(socketId, roomCode, playerId);
+    if (!info) return { error: "Not in room. Please reload to reconnect." };
 
     const room = this.rooms.get(info.roomCode);
     if (!room || room.status !== "AUCTION" || !room.currentPlayer) {
@@ -522,7 +587,6 @@ class GameManager {
       }
     }
 
-    // Direct, reliable purse check (no strict reserve equation locking out bids)
     if (teamState.purse < nextBid) {
       return {
         error: `Insufficient purse! You have ₹${teamState.purse.toFixed(2)} Cr remaining, but this bid requires ₹${nextBid.toFixed(2)} Cr.`
@@ -531,7 +595,7 @@ class GameManager {
 
     room.currentBid = nextBid;
     room.currentBidder = teamId;
-    room.passedTeams = []; // Reset passed list whenever a new bid is placed!
+    room.passedTeams = []; // Reset passes when bid is placed
 
     room.bidHistory.unshift({
       teamId,
@@ -540,7 +604,6 @@ class GameManager {
       time: new Date().toLocaleTimeString()
     });
 
-    // Anti-sniping reset
     if (room.timeLeft < room.settings.antiSnipeSeconds) {
       room.timeLeft = room.settings.antiSnipeSeconds;
     }
@@ -556,9 +619,9 @@ class GameManager {
     return { success: true };
   }
 
-  passTurn(socketId) {
-    const info = this.playerSockets.get(socketId);
-    if (!info) return { error: "Not in room" };
+  passTurn(socketId, roomCode = null, playerId = null) {
+    const info = this.ensurePlayerInRoom(socketId, roomCode, playerId);
+    if (!info) return { error: "Not in room. Please reload to reconnect." };
     const room = this.rooms.get(info.roomCode);
     if (!room || room.status !== "AUCTION") return { error: "Not in auction" };
 
@@ -575,17 +638,13 @@ class GameManager {
       passedTeams: room.passedTeams
     });
 
-    // Fast-Forward Logic:
-    // If all competing teams have passed, don't make them wait!
     const allActiveTeams = room.players.map((p) => p.teamId).filter(Boolean);
 
     let shouldFastForward = false;
     if (room.currentBidder) {
-      // Someone is leading: check if all rival teams passed
       const rivalTeams = allActiveTeams.filter((t) => t !== room.currentBidder);
       shouldFastForward = rivalTeams.length > 0 && rivalTeams.every((t) => room.passedTeams.includes(t));
     } else {
-      // No bid yet: check if ALL teams passed
       shouldFastForward = allActiveTeams.length > 0 && allActiveTeams.every((t) => room.passedTeams.includes(t));
     }
 
@@ -634,7 +693,6 @@ class GameManager {
     this.clearRoomTimer(room);
 
     if (room.currentBid === 0 || !room.currentBidder) {
-      // UNSOLD
       room.unsoldPool.push(room.currentPlayer);
       room.lastSale = {
         player: room.currentPlayer,
@@ -651,7 +709,6 @@ class GameManager {
       return;
     }
 
-    // Check RTM eligibility
     const origTeamId = room.currentPlayer.originalTeamId;
     const winningTeamId = room.currentBidder;
     const origTeamState = origTeamId ? room.teamsState[origTeamId] : null;
@@ -667,7 +724,6 @@ class GameManager {
       return;
     }
 
-    // Standard Direct Sale
     this.finalizeSale(room, winningTeamId, room.currentBid, false);
   }
 
@@ -701,9 +757,9 @@ class GameManager {
     }, 1000);
   }
 
-  respondRTM(socketId, exerciseRTM) {
-    const info = this.playerSockets.get(socketId);
-    if (!info) return { error: "Not in room" };
+  respondRTM(socketId, exerciseRTM, roomCode = null, playerId = null) {
+    const info = this.ensurePlayerInRoom(socketId, roomCode, playerId);
+    if (!info) return { error: "Not in room. Please reload to reconnect." };
     const room = this.rooms.get(info.roomCode);
     if (!room || room.status !== "RTM_CHALLENGE" || !room.rtmState) {
       return { error: "No active RTM challenge." };
@@ -772,8 +828,8 @@ class GameManager {
     }, 3500);
   }
 
-  skipCurrentPlayer(socketId) {
-    const info = this.playerSockets.get(socketId);
+  skipCurrentPlayer(socketId, roomCode = null, playerId = null) {
+    const info = this.ensurePlayerInRoom(socketId, roomCode, playerId);
     if (!info) return { error: "Not in room" };
     const room = this.rooms.get(info.roomCode);
     if (!room || room.status !== "AUCTION") return { error: "Not in auction" };
@@ -792,8 +848,8 @@ class GameManager {
     return { success: true };
   }
 
-  reAuctionUnsold(socketId) {
-    const info = this.playerSockets.get(socketId);
+  reAuctionUnsold(socketId, roomCode = null, playerId = null) {
+    const info = this.ensurePlayerInRoom(socketId, roomCode, playerId);
     if (!info) return { error: "Not in room" };
     const room = this.rooms.get(info.roomCode);
     if (!room) return { error: "Room not found" };
@@ -889,28 +945,35 @@ class GameManager {
 
     if (!room) return;
 
-    const playerIndex = room.players.findIndex((p) => p.id === info.playerId);
-    if (playerIndex >= 0) {
-      const player = room.players[playerIndex];
+    const player = room.players.find((p) => p.id === info.playerId);
+    if (player) {
+      player.isConnected = false;
 
+      // In active auction game (RETENTION, AUCTION, etc.), NEVER remove the player or delete room!
+      // They can reload or reconnect at any time from localStorage.
       if (room.status === "LOBBY") {
-        room.players.splice(playerIndex, 1);
-
-        if (player.isHost && room.players.length > 0) {
-          room.players[0].isHost = true;
-          room.hostId = room.players[0].id;
-        }
-
-        if (room.players.length === 0) {
-          this.clearRoomTimer(room);
-          this.rooms.delete(info.roomCode);
-          return;
-        }
-
-        this.io.to(room.code).emit("player_left", {
-          playerId: player.id,
-          room: this.getSanitizedRoom(room)
-        });
+        // In lobby, wait 20 seconds before dropping to allow simple page reloads
+        setTimeout(() => {
+          if (!player.isConnected && room.status === "LOBBY") {
+            const idx = room.players.findIndex((p) => p.id === player.id);
+            if (idx >= 0) {
+              room.players.splice(idx, 1);
+              if (player.isHost && room.players.length > 0) {
+                room.players[0].isHost = true;
+                room.hostId = room.players[0].id;
+              }
+              if (room.players.length === 0) {
+                this.clearRoomTimer(room);
+                this.rooms.delete(info.roomCode);
+                return;
+              }
+              this.io.to(room.code).emit("player_left", {
+                playerId: player.id,
+                room: this.getSanitizedRoom(room)
+              });
+            }
+          }
+        }, 20000);
       } else {
         this.io.to(room.code).emit("player_disconnected", {
           playerId: player.id,
@@ -933,7 +996,8 @@ class GameManager {
         name: p.name,
         isHost: p.isHost,
         teamId: p.teamId,
-        retentionsLocked: p.retentionsLocked
+        retentionsLocked: p.retentionsLocked,
+        isConnected: p.isConnected !== false
       })),
       teamsState: room.teamsState,
       currentPool: room.currentPool,

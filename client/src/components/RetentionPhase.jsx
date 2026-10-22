@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { SQUADS } from "../squadsData";
 import { getTeam } from "../teamsData";
-import { Shield, Check, Lock, DollarSign, Users, Sparkles, Filter, Info, Trash2 } from "lucide-react";
+import { Shield, Check, Lock, DollarSign, Users, Sparkles, Filter, Info, Trash2, LogOut } from "lucide-react";
 
 const RETENTION_SLABS = [18.0, 14.0, 11.0, 18.0, 14.0, 4.0];
 
@@ -9,7 +9,8 @@ export default function RetentionPhase({
   room,
   playerId,
   onToggleRetention,
-  onLockRetentions
+  onLockRetentions,
+  onLeaveRoom
 }) {
   const [roleFilter, setRoleFilter] = useState("ALL_ROLES");
 
@@ -133,6 +134,21 @@ export default function RetentionPhase({
               </>
             )}
           </button>
+
+          {onLeaveRoom && (
+            <button
+              onClick={() => {
+                if (window.confirm("Are you sure you want to exit the auction room?")) {
+                  onLeaveRoom();
+                }
+              }}
+              title="Leave Room"
+              className="px-3.5 py-3 rounded-2xl bg-slate-900 hover:bg-red-950/40 border border-slate-800 hover:border-red-800/50 text-slate-400 hover:text-red-300 font-semibold text-xs transition flex items-center gap-1.5"
+            >
+              <LogOut className="w-4 h-4" />
+              <span className="hidden sm:inline">Exit</span>
+            </button>
+          )}
         </div>
       </header>
 

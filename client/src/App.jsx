@@ -9,6 +9,8 @@ import PoolPreview from "./components/PoolPreview";
 import RTMModal from "./components/RTMModal";
 import PlayingXIBuilder from "./components/PlayingXIBuilder";
 
+const SESSION_KEY = "ipl_auction_session";
+
 export default function App() {
   const [room, setRoom] = useState(null);
   const [playerId, setPlayerId] = useState(null);
@@ -16,6 +18,40 @@ export default function App() {
   const [soundEnabled, setSoundEnabled] = useState(true);
 
   useEffect(() => {
+    // 0. Auto-reconnect on load from localStorage
+    try {
+      const saved = JSON.parse(localStorage.getItem(SESSION_KEY));
+      if (saved?.roomCode && saved?.playerId) {
+        socket.emit("reconnect_player", { roomCode: saved.roomCode, playerId: saved.playerId }, (res) => {
+          if (res?.success) {
+            setPlayerId(res.playerId);
+            setRoom(res.room);
+          } else {
+            localStorage.removeItem(SESSION_KEY);
+          }
+        });
+      }
+    } catch (e) {
+      localStorage.removeItem(SESSION_KEY);
+    }
+
+    // 0b. Auto-reconnect whenever socket reconnects
+    const handleSocketConnect = () => {
+      try {
+        const saved = JSON.parse(localStorage.getItem(SESSION_KEY));
+        if (saved?.roomCode && saved?.playerId) {
+          socket.emit("reconnect_player", { roomCode: saved.roomCode, playerId: saved.playerId }, (res) => {
+            if (res?.success) {
+              setPlayerId(res.playerId);
+              setRoom(res.room);
+            }
+          });
+        }
+      } catch (e) {}
+    };
+
+    socket.on("connect", handleSocketConnect);
+
     // 1. Room updates
     socket.on("room_updated", ({ room }) => {
       setRoom(room);
@@ -213,6 +249,7 @@ export default function App() {
     });
 
     return () => {
+      socket.off("connect", handleSocketConnect);
       socket.off("room_updated");
       socket.off("game_phase_changed");
       socket.off("pool_preview_started");
@@ -238,6 +275,13 @@ export default function App() {
       if (res.success) {
         setPlayerId(res.playerId);
         setRoom(res.room);
+        try {
+          localStorage.setItem(SESSION_KEY, JSON.stringify({
+            roomCode: res.roomCode,
+            playerId: res.playerId,
+            playerName: hostName
+          }));
+        } catch (e) {}
       }
     });
   };
@@ -251,64 +295,80 @@ export default function App() {
       if (res.success) {
         setPlayerId(res.playerId);
         setRoom(res.room);
+        try {
+          localStorage.setItem(SESSION_KEY, JSON.stringify({
+            roomCode: res.roomCode,
+            playerId: res.playerId,
+            playerName
+          }));
+        } catch (e) {}
       }
     });
   };
 
+  const handleLeaveRoom = () => {
+    try {
+      localStorage.removeItem(SESSION_KEY);
+    } catch (e) {}
+    socket.emit("leave_room");
+    setRoom(null);
+    setPlayerId(null);
+  };
+
   const handleSelectTeam = (teamId) => {
-    socket.emit("select_team", { teamId }, (res) => {
+    socket.emit("select_team", { teamId, roomCode: room?.code, playerId }, (res) => {
       if (res?.error) alert(res.error);
     });
   };
 
   const handleSaveSettings = (newSettings) => {
-    socket.emit("update_settings", newSettings, (res) => {
+    socket.emit("update_settings", { newSettings, roomCode: room?.code, playerId }, (res) => {
       if (res?.error) alert(res.error);
     });
   };
 
   const handleStartGame = () => {
-    socket.emit("start_game", (res) => {
+    socket.emit("start_game", { roomCode: room?.code, playerId }, (res) => {
       if (res?.error) alert(res.error);
     });
   };
 
   const handleToggleRetention = (targetPlayerId) => {
-    socket.emit("toggle_retention_player", { playerId: targetPlayerId }, (res) => {
+    socket.emit("toggle_retention_player", { playerId: targetPlayerId, roomCode: room?.code, playerId }, (res) => {
       if (res?.error) alert(res.error);
     });
   };
 
   const handleLockRetentions = () => {
-    socket.emit("lock_retentions", (res) => {
+    socket.emit("lock_retentions", { roomCode: room?.code, playerId }, (res) => {
       if (res?.error) alert(res.error);
     });
   };
 
   const handlePlaceBid = (customAmount, callback) => {
-    socket.emit("place_bid", { customAmount }, callback);
+    socket.emit("place_bid", { customAmount, roomCode: room?.code, playerId }, callback);
   };
 
   const handlePassTurn = () => {
-    socket.emit("pass_turn");
+    socket.emit("pass_turn", { roomCode: room?.code, playerId });
   };
 
   const handleSkipPlayer = () => {
-    socket.emit("skip_player");
+    socket.emit("skip_player", { roomCode: room?.code, playerId });
   };
 
   const handleRespondRTM = (exerciseRTM) => {
-    socket.emit("respond_rtm", { exerciseRTM });
+    socket.emit("respond_rtm", { exerciseRTM, roomCode: room?.code, playerId });
   };
 
   const handleReAuctionUnsold = () => {
-    socket.emit("re_auction_unsold", (res) => {
+    socket.emit("re_auction_unsold", { roomCode: room?.code, playerId }, (res) => {
       if (res?.error) alert(res.error);
     });
   };
 
   const handleSkipPoolPreview = () => {
-    socket.emit("skip_pool_preview", (res) => {
+    socket.emit("skip_pool_preview", { roomCode: room?.code, playerId }, (res) => {
       if (res?.error) alert(res.error);
     });
   };
@@ -330,6 +390,7 @@ export default function App() {
           onOpenSettings={() => setSettingsOpen(true)}
           onCreateRoom={handleCreateRoom}
           onJoinRoom={handleJoinRoom}
+          onLeaveRoom={handleLeaveRoom}
         />
         {settingsOpen && room && (
           <SettingsModal
@@ -349,6 +410,7 @@ export default function App() {
         playerId={playerId}
         onToggleRetention={handleToggleRetention}
         onLockRetentions={handleLockRetentions}
+        onLeaveRoom={handleLeaveRoom}
       />
     );
   }
@@ -369,7 +431,6 @@ export default function App() {
   }
 
   if (room.status === "AUCTION" || room.status === "RTM_CHALLENGE") {
-    // Determine if player's team is original franchise
     const myPlayer = room.players.find((p) => p.id === playerId);
     const enrichedRtmState = room.rtmState
       ? { ...room.rtmState, origTeamIdPlayerTeam: myPlayer?.teamId }
@@ -383,6 +444,7 @@ export default function App() {
           onPlaceBid={handlePlaceBid}
           onPassTurn={handlePassTurn}
           onSkipPlayer={handleSkipPlayer}
+          onLeaveRoom={handleLeaveRoom}
           soundEnabled={soundEnabled}
           onToggleSound={toggleSound}
         />
@@ -403,6 +465,7 @@ export default function App() {
         room={room}
         playerId={playerId}
         onReAuctionUnsold={handleReAuctionUnsold}
+        onLeaveRoom={handleLeaveRoom}
       />
     );
   }
