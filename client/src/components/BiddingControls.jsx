@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Gavel, FastForward, AlertCircle, Plus, Check } from "lucide-react";
+import { Gavel, FastForward, AlertCircle, Plus, Check, X, ShieldAlert } from "lucide-react";
 
 export default function BiddingControls({
   currentBid,
@@ -7,6 +7,7 @@ export default function BiddingControls({
   currentPlayer,
   myTeamId,
   myTeamState,
+  passedTeams = [],
   settings,
   isHost,
   onPlaceBid,
@@ -19,11 +20,11 @@ export default function BiddingControls({
   if (!currentPlayer) return null;
 
   const isLeading = currentBidder === myTeamId;
+  const hasPassed = passedTeams.includes(myTeamId);
   const purse = myTeamState?.purse || 0;
   const squad = myTeamState?.squad || [];
   const overseasCount = squad.filter((p) => p.isOverseas).length;
 
-  // Calculate default next increment
   const getNextIncrement = (curr, base) => {
     if (curr === 0) return base;
     if (curr < 1.0) return 0.20;
@@ -36,19 +37,14 @@ export default function BiddingControls({
     ? currentPlayer.basePrice
     : +(currentBid + getNextIncrement(currentBid, currentPlayer.basePrice)).toFixed(2);
 
-  // Validation
   const validateBid = (amount) => {
     if (isLeading) return "You already hold the highest bid!";
     if (squad.length >= settings.maxSquad) return `Squad is full (${settings.maxSquad} players).`;
     if (currentPlayer.isOverseas && overseasCount >= settings.maxOverseas) {
       return `Overseas quota full (${settings.maxOverseas} max).`;
     }
-
-    const slotsNeeded = Math.max(0, settings.minSquad - (squad.length + 1));
-    const reservedPurse = +(slotsNeeded * 0.20).toFixed(2);
-
-    if (purse - amount < reservedPurse) {
-      return `Purse constraint! Need ₹${reservedPurse} Cr reserved for min squad.`;
+    if (purse < amount) {
+      return `Insufficient purse! You have ₹${purse.toFixed(2)} Cr left, but this bid requires ₹${amount.toFixed(2)} Cr.`;
     }
     return null;
   };
@@ -71,7 +67,7 @@ export default function BiddingControls({
     setErrorMsg("");
     const amount = Number(customInput);
     if (!amount || amount <= currentBid) {
-      setErrorMsg("Bid must be strictly higher than current bid.");
+      setErrorMsg("Custom bid must be strictly higher than the current bid.");
       return;
     }
     const err = validateBid(amount);
@@ -144,7 +140,7 @@ export default function BiddingControls({
         ))}
       </div>
 
-      {/* Custom Bid Input & Pass Button */}
+      {/* Custom Bid Input & Interactive Pass Button */}
       <div className="flex items-center gap-2 pt-1 border-t border-slate-800/80">
         <form onSubmit={handleCustomBid} className="flex-1 flex gap-2">
           <input
@@ -166,12 +162,19 @@ export default function BiddingControls({
           </button>
         </form>
 
+        {/* Pass Button with state */}
         <button
           onClick={onPassTurn}
-          disabled={isLeading}
-          className="px-3.5 py-2 bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-slate-200 text-xs font-semibold rounded-xl transition"
+          disabled={isLeading || hasPassed}
+          title={hasPassed ? "You have already passed on this player" : "Pass your turn. If all rivals pass, bidding ends immediately."}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+            hasPassed
+              ? "bg-slate-800 text-slate-500 cursor-default border border-slate-800"
+              : "bg-slate-950 hover:bg-rose-500/10 border border-slate-800 hover:border-rose-500/30 text-slate-300 hover:text-rose-400"
+          }`}
         >
-          Pass
+          <X className="w-3.5 h-3.5 text-rose-400" />
+          <span>{hasPassed ? "Passed ✕" : "Pass"}</span>
         </button>
 
         {isHost && (
@@ -184,6 +187,10 @@ export default function BiddingControls({
             <span>Skip</span>
           </button>
         )}
+      </div>
+
+      <div className="text-[10px] text-slate-500 text-center">
+        Tip: If all managers click <b className="text-slate-400">Pass</b>, the player is sold or marked unsold immediately without waiting for the timer!
       </div>
     </div>
   );

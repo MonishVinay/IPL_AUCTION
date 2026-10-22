@@ -11,7 +11,7 @@ export default function SettingsModal({ settings, onClose, onSave }) {
     minSquad: settings.minSquad || 18,
     maxSquad: settings.maxSquad || 25,
     includeBonusPlayers: settings.includeBonusPlayers ?? true,
-    bidTimerSeconds: settings.bidTimerSeconds || 12
+    bidTimerSeconds: settings.bidTimerSeconds || 20
   });
 
   const handleSubmit = (e) => {
@@ -204,7 +204,7 @@ export default function SettingsModal({ settings, onClose, onSave }) {
                 onChange={(e) => setForm({ ...form, bidTimerSeconds: Number(e.target.value) })}
                 className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white text-sm"
               >
-                {[8, 10, 12, 15, 20].map((sec) => (
+                {[15, 20, 25, 30, 45].map((sec) => (
                   <option key={sec} value={sec}>
                     {sec} Seconds
                   </option>

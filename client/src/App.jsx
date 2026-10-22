@@ -62,11 +62,15 @@ export default function App() {
           currentBid: data.currentBid,
           currentBidder: data.currentBidder,
           bidHistory: data.bidHistory,
+          passedTeams: data.passedTeams || [],
           timeLeft: data.timeLeft,
-          currentIndex: data.currentIndex,
-          totalPlayers: data.totalPlayers,
+          currentPool: data.currentPool,
+          currentPoolIndex: data.currentPoolIndex,
+          currentPoolPlayerIndex: data.currentPoolPlayerIndex,
+          totalPools: data.totalPools,
           status: "AUCTION",
-          rtmState: null
+          rtmState: null,
+          lastSale: null
         };
       });
       sounds.playGavel();
@@ -81,10 +85,24 @@ export default function App() {
           currentBid: data.currentBid,
           currentBidder: data.currentBidder,
           bidHistory: data.bidHistory,
-          timeLeft: data.timeLeft
+          timeLeft: data.timeLeft,
+          passedTeams: data.passedTeams || []
         };
       });
       sounds.playBid();
+    });
+
+    // 4b. Team Passed
+    socket.on("team_passed", ({ passedTeams }) => {
+      setRoom((prev) => {
+        if (!prev) return prev;
+        return { ...prev, passedTeams: passedTeams || [] };
+      });
+    });
+
+    // 4c. All Teams Passed Fast Forward
+    socket.on("all_teams_passed", () => {
+      sounds.playGavel();
     });
 
     // 5. Timer Tick
@@ -105,7 +123,14 @@ export default function App() {
         return {
           ...prev,
           teamsState: data.teamsState,
-          soldCount: (prev.soldCount || 0) + 1
+          soldCount: (prev.soldCount || 0) + 1,
+          lastSale: {
+            player: data.player,
+            buyerTeamId: data.buyerTeamId,
+            amount: data.amount,
+            viaRTM: data.viaRTM,
+            unsold: false
+          }
         };
       });
       sounds.playGavel();
@@ -113,12 +138,16 @@ export default function App() {
     });
 
     // 7. Player Unsold
-    socket.on("player_unsold", () => {
+    socket.on("player_unsold", (data) => {
       setRoom((prev) => {
         if (!prev) return prev;
         return {
           ...prev,
-          unsoldPoolCount: (prev.unsoldPoolCount || 0) + 1
+          unsoldPoolCount: (prev.unsoldPoolCount || 0) + 1,
+          lastSale: {
+            player: data?.player || prev.currentPlayer,
+            unsold: true
+          }
         };
       });
       sounds.playGavel();
@@ -190,6 +219,8 @@ export default function App() {
       socket.off("pool_preview_tick");
       socket.off("player_presented");
       socket.off("bid_updated");
+      socket.off("team_passed");
+      socket.off("all_teams_passed");
       socket.off("timer_tick");
       socket.off("player_sold");
       socket.off("player_unsold");

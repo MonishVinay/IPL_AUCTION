@@ -39,8 +39,8 @@ class GameManager {
         maxSquad: 25,
         maxOverseas: 8,
         includeBonusPlayers: true,
-        bidTimerSeconds: 12,
-        antiSnipeSeconds: 5,
+        bidTimerSeconds: 20, // Increased default timer for better tactical play
+        antiSnipeSeconds: 8, // Reset timer to at least 8s if bid comes under 8s
         poolPreviewSeconds: 8
       },
       players: [
@@ -63,9 +63,12 @@ class GameManager {
       currentBid: 0,
       currentBidder: null, // teamId
       bidHistory: [],
+      passedTeams: [], // teamIds that clicked "Pass" on the current player
       timer: null,
+      transitionTimeout: null,
       timeLeft: 0,
       rtmState: null, // active RTM request
+      lastSale: null, // { player, buyerTeamId, amount, viaRTM }
       unsoldPool: [],
       soldCount: 0
     };
@@ -145,13 +148,12 @@ class GameManager {
       minSquad: Math.max(11, Math.min(20, Number(newSettings.minSquad) || 18)),
       maxSquad: Math.max(18, Math.min(25, Number(newSettings.maxSquad) || 25)),
       includeBonusPlayers: Boolean(newSettings.includeBonusPlayers),
-      bidTimerSeconds: Math.max(6, Math.min(30, Number(newSettings.bidTimerSeconds) || 12))
+      bidTimerSeconds: Math.max(10, Math.min(60, Number(newSettings.bidTimerSeconds) || 20))
     };
 
     return { success: true, room: this.getSanitizedRoom(room) };
   }
 
-  // Get cost for specific retention slot (0-indexed)
   getRetentionSlotCost(room, slotIndex) {
     if (room.settings.retentionMode === "flat") {
       return room.settings.flatRetentionCost;
@@ -159,7 +161,6 @@ class GameManager {
     return RETENTION_SLABS[slotIndex] !== undefined ? RETENTION_SLABS[slotIndex] : 4.0;
   }
 
-  // Calculate total retention cost for n players
   calculateRetentionCost(room, count) {
     if (count <= 0) return 0;
     let total = 0;
@@ -223,17 +224,14 @@ class GameManager {
 
     const idx = teamState.retained.findIndex((r) => r.id === playerId);
     if (idx >= 0) {
-      // Deselect
       teamState.retained.splice(idx, 1);
     } else {
-      // Select
       if (teamState.retained.length >= room.settings.maxRetentions) {
         return { error: `Maximum ${room.settings.maxRetentions} retentions allowed.` };
       }
       teamState.retained.push(playerRecord);
     }
 
-    // Assign slot costs to each retained player
     teamState.retained = teamState.retained.map((p, slotIdx) => ({
       ...p,
       slotNumber: slotIdx + 1,
@@ -278,19 +276,26 @@ class GameManager {
       t.retained.forEach((r) => retainedIds.add(r.id));
     });
 
-    // 1. Gather all squad players that are not retained
+    // 1. All squad players that are not retained
     let pool = SQUADS.filter((player) => !retainedIds.has(player.id));
 
-    // 2. Add bonus players if enabled
-    let bonusList = [];
-    if (room.settings.includeBonusPlayers) {
-      bonusList = [...BONUS_PLAYERS];
-    }
+    // Global de-duplication registry: guarantees NO player appears in more than 1 pool
+    const seenIds = new Set();
+    const takeUnique = (list) => {
+      const result = [];
+      for (const p of list) {
+        if (!seenIds.has(p.id)) {
+          seenIds.add(p.id);
+          result.push(p);
+        }
+      }
+      return result;
+    };
 
     const shuffle = (arr) => arr.sort(() => Math.random() - 0.5);
 
     // Build real IPL Auction Sets:
-    // Set 1: Marquee Superstars (M1)
+    // Set 1: Marquee Superstars (M1) — Key players from squads
     const marquee = pool.filter((p) => p.isKeyPlayer);
 
     // Set 2: Capped Batters (BA1)
@@ -311,76 +316,74 @@ class GameManager {
     // Set 7: Uncapped Talents (UNCAP)
     const uncapped = pool.filter((p) => !p.isKeyPlayer && p.basePrice < 1.0);
 
-    // Build pool definitions (only include sets with players)
     const rawSets = [
       {
         id: "set_m1",
         code: "M1",
         name: "Set 1: Marquee Superstars",
         description: "World-class match winners & marquee franchise icons",
-        players: shuffle(marquee)
+        players: shuffle(takeUnique(marquee))
       },
       {
         id: "set_ba1",
         code: "BA1",
         name: "Set 2: Capped Batters",
         description: "Proven international & domestic top-order specialists",
-        players: shuffle(cappedBatters)
+        players: shuffle(takeUnique(cappedBatters))
       },
       {
         id: "set_wk1",
         code: "WK1",
         name: "Set 3: Capped Wicketkeepers",
         description: "Explosive glovemen & middle-order finishers",
-        players: shuffle(cappedKeepers)
+        players: shuffle(takeUnique(cappedKeepers))
       },
       {
         id: "set_al1",
         code: "AL1",
         name: "Set 4: Capped All-Rounders",
         description: "Dual-threat pace & spin bowling all-rounders",
-        players: shuffle(cappedAllrounders)
+        players: shuffle(takeUnique(cappedAllrounders))
       },
       {
         id: "set_fa1",
         code: "FA1",
         name: "Set 5: Capped Fast Bowlers",
         description: "Express speedsters, swing masters & death overs specialists",
-        players: shuffle(cappedPacers)
+        players: shuffle(takeUnique(cappedPacers))
       },
       {
         id: "set_sp1",
         code: "SP1",
         name: "Set 6: Capped Spinners",
         description: "Wrist spinners, mystery turners & middle-overs controllers",
-        players: shuffle(cappedSpinners)
+        players: shuffle(takeUnique(cappedSpinners))
       },
       {
         id: "set_uncap",
         code: "UNCAP",
         name: "Set 7: Uncapped Emerging Stars",
         description: "Exciting domestic prodigies & rising Indian stars",
-        players: shuffle(uncapped)
+        players: shuffle(takeUnique(uncapped))
       }
     ];
 
-    if (room.settings.includeBonusPlayers && bonusList.length > 0) {
+    // Optional Bonus Pool (STAR)
+    if (room.settings.includeBonusPlayers && BONUS_PLAYERS.length > 0) {
       rawSets.push({
         id: "set_star",
         code: "STAR",
         name: "Set 8: Global Wildcard Legends",
         description: "Bonus international stars & world cricket legends",
-        players: shuffle(bonusList)
+        players: shuffle(takeUnique(BONUS_PLAYERS))
       });
     }
 
-    // Keep only pools that contain players
     room.pools = rawSets.filter((s) => s.players.length > 0);
     room.currentPoolIndex = 0;
     room.unsoldPool = [];
     room.soldCount = 0;
 
-    // Start with preview of Pool 1!
     this.startPoolPreview(room, 0);
   }
 
@@ -400,7 +403,9 @@ class GameManager {
     room.currentPlayer = null;
     room.currentBid = 0;
     room.currentBidder = null;
+    room.passedTeams = [];
     room.rtmState = null;
+    room.lastSale = null;
 
     this.io.to(room.code).emit("pool_preview_started", {
       pool: room.currentPool,
@@ -442,8 +447,8 @@ class GameManager {
   presentNextPlayerInPool(room) {
     this.clearRoomTimer(room);
     room.currentPoolPlayerIndex += 1;
+    room.lastSale = null;
 
-    // If current pool exhausted, move to the next pool!
     if (room.currentPoolPlayerIndex >= room.currentPool.players.length) {
       if (room.currentPoolIndex + 1 < room.pools.length) {
         this.startPoolPreview(room, room.currentPoolIndex + 1);
@@ -458,6 +463,7 @@ class GameManager {
     room.currentBid = 0;
     room.currentBidder = null;
     room.bidHistory = [];
+    room.passedTeams = []; // Reset passed list for new player
     room.timeLeft = room.settings.bidTimerSeconds;
     room.status = "AUCTION";
     room.rtmState = null;
@@ -490,11 +496,11 @@ class GameManager {
     if (!teamState) return { error: "Team state not found" };
 
     if (room.currentBidder === teamId) {
-      return { error: "You are already the highest bidder!" };
+      return { error: "You are already holding the highest bid!" };
     }
 
     if (teamState.squad.length >= room.settings.maxSquad) {
-      return { error: `Squad is full! Max ${room.settings.maxSquad} players.` };
+      return { error: `Squad is full! Max ${room.settings.maxSquad} players allowed.` };
     }
 
     if (room.currentPlayer.isOverseas) {
@@ -516,17 +522,17 @@ class GameManager {
       }
     }
 
-    const slotsNeeded = Math.max(0, room.settings.minSquad - (teamState.squad.length + 1));
-    const reservedPurse = +(slotsNeeded * 0.20).toFixed(2);
-
-    if (teamState.purse - nextBid < reservedPurse) {
+    // Direct, reliable purse check (no strict reserve equation locking out bids)
+    if (teamState.purse < nextBid) {
       return {
-        error: `Insufficient purse! You need ₹${reservedPurse.toFixed(2)} Cr reserved to complete the minimum ${room.settings.minSquad} players.`
+        error: `Insufficient purse! You have ₹${teamState.purse.toFixed(2)} Cr remaining, but this bid requires ₹${nextBid.toFixed(2)} Cr.`
       };
     }
 
     room.currentBid = nextBid;
     room.currentBidder = teamId;
+    room.passedTeams = []; // Reset passed list whenever a new bid is placed!
+
     room.bidHistory.unshift({
       teamId,
       teamName: TEAMS.find((t) => t.id === teamId)?.name || teamId,
@@ -534,6 +540,7 @@ class GameManager {
       time: new Date().toLocaleTimeString()
     });
 
+    // Anti-sniping reset
     if (room.timeLeft < room.settings.antiSnipeSeconds) {
       room.timeLeft = room.settings.antiSnipeSeconds;
     }
@@ -542,7 +549,8 @@ class GameManager {
       currentBid: room.currentBid,
       currentBidder: room.currentBidder,
       bidHistory: room.bidHistory,
-      timeLeft: room.timeLeft
+      timeLeft: room.timeLeft,
+      passedTeams: room.passedTeams
     });
 
     return { success: true };
@@ -555,9 +563,42 @@ class GameManager {
     if (!room || room.status !== "AUCTION") return { error: "Not in auction" };
 
     const player = room.players.find((p) => p.id === info.playerId);
-    if (player && player.teamId) {
-      this.io.to(room.code).emit("team_passed", { teamId: player.teamId, playerName: player.name });
+    if (!player || !player.teamId) return { error: "No team assigned" };
+
+    if (!room.passedTeams.includes(player.teamId)) {
+      room.passedTeams.push(player.teamId);
     }
+
+    this.io.to(room.code).emit("team_passed", {
+      teamId: player.teamId,
+      playerName: player.name,
+      passedTeams: room.passedTeams
+    });
+
+    // Fast-Forward Logic:
+    // If all competing teams have passed, don't make them wait!
+    const allActiveTeams = room.players.map((p) => p.teamId).filter(Boolean);
+
+    let shouldFastForward = false;
+    if (room.currentBidder) {
+      // Someone is leading: check if all rival teams passed
+      const rivalTeams = allActiveTeams.filter((t) => t !== room.currentBidder);
+      shouldFastForward = rivalTeams.length > 0 && rivalTeams.every((t) => room.passedTeams.includes(t));
+    } else {
+      // No bid yet: check if ALL teams passed
+      shouldFastForward = allActiveTeams.length > 0 && allActiveTeams.every((t) => room.passedTeams.includes(t));
+    }
+
+    if (shouldFastForward) {
+      this.clearRoomTimer(room);
+      this.io.to(room.code).emit("fast_forward", {
+        message: room.currentBidder ? "All rival managers have passed! Gavel striking..." : "All managers passed! Player unsold..."
+      });
+      room.transitionTimeout = setTimeout(() => {
+        this.handleGavelStrike(room);
+      }, 1000);
+    }
+
     return { success: true };
   }
 
@@ -569,6 +610,7 @@ class GameManager {
       currentBid: room.currentBid,
       currentBidder: room.currentBidder,
       bidHistory: room.bidHistory,
+      passedTeams: room.passedTeams,
       timeLeft: room.timeLeft,
       currentPool: room.currentPool,
       currentPoolIndex: room.currentPoolIndex,
@@ -589,19 +631,27 @@ class GameManager {
   }
 
   handleGavelStrike(room) {
+    this.clearRoomTimer(room);
+
     if (room.currentBid === 0 || !room.currentBidder) {
       // UNSOLD
       room.unsoldPool.push(room.currentPlayer);
+      room.lastSale = {
+        player: room.currentPlayer,
+        unsold: true
+      };
+
       this.io.to(room.code).emit("player_unsold", {
         player: room.currentPlayer
       });
 
-      setTimeout(() => {
+      room.transitionTimeout = setTimeout(() => {
         this.presentNextPlayerInPool(room);
-      }, 3000);
+      }, 2500);
       return;
     }
 
+    // Check RTM eligibility
     const origTeamId = room.currentPlayer.originalTeamId;
     const winningTeamId = room.currentBidder;
     const origTeamState = origTeamId ? room.teamsState[origTeamId] : null;
@@ -617,10 +667,12 @@ class GameManager {
       return;
     }
 
-    this.finalizeSale(room, winningTeamId, room.currentBid);
+    // Standard Direct Sale
+    this.finalizeSale(room, winningTeamId, room.currentBid, false);
   }
 
   initiateRTM(room, origTeamId, winningTeamId) {
+    this.clearRoomTimer(room);
     room.status = "RTM_CHALLENGE";
     room.rtmState = {
       player: room.currentPlayer,
@@ -644,7 +696,7 @@ class GameManager {
           origTeamId,
           reason: "Time Expired"
         });
-        this.finalizeSale(room, winningTeamId, room.currentBid);
+        this.finalizeSale(room, winningTeamId, room.currentBid, false);
       }
     }, 1000);
   }
@@ -702,17 +754,22 @@ class GameManager {
 
     room.soldCount += 1;
 
-    this.io.to(room.code).emit("player_sold", {
+    const saleInfo = {
       player: room.currentPlayer,
       buyerTeamId,
       amount,
-      viaRTM,
+      viaRTM
+    };
+    room.lastSale = saleInfo;
+
+    this.io.to(room.code).emit("player_sold", {
+      ...saleInfo,
       teamsState: room.teamsState
     });
 
-    setTimeout(() => {
+    room.transitionTimeout = setTimeout(() => {
       this.presentNextPlayerInPool(room);
-    }, 4000);
+    }, 3500);
   }
 
   skipCurrentPlayer(socketId) {
@@ -728,9 +785,9 @@ class GameManager {
     room.unsoldPool.push(room.currentPlayer);
     this.io.to(room.code).emit("player_unsold", { player: room.currentPlayer, skipped: true });
 
-    setTimeout(() => {
+    room.transitionTimeout = setTimeout(() => {
       this.presentNextPlayerInPool(room);
-    }, 1500);
+    }, 1200);
 
     return { success: true };
   }
@@ -748,7 +805,6 @@ class GameManager {
       return { error: "No unsold players available for re-auction." };
     }
 
-    // Create Accelerated Round as a new pool!
     const accelPool = {
       id: `set_accel_${Date.now()}`,
       code: "ACCEL",
@@ -817,6 +873,10 @@ class GameManager {
     if (room.timer) {
       clearInterval(room.timer);
       room.timer = null;
+    }
+    if (room.transitionTimeout) {
+      clearTimeout(room.transitionTimeout);
+      room.transitionTimeout = null;
     }
   }
 
@@ -893,9 +953,11 @@ class GameManager {
       currentBid: room.currentBid,
       currentBidder: room.currentBidder,
       bidHistory: room.bidHistory,
+      passedTeams: room.passedTeams || [],
       timeLeft: room.timeLeft,
       totalPlayers: totalPlayersCount,
       rtmState: room.rtmState,
+      lastSale: room.lastSale,
       unsoldPoolCount: room.unsoldPool.length,
       soldCount: room.soldCount
     };

@@ -232,6 +232,80 @@ export default function AuctionArena({
                   </div>
                 </div>
               </div>
+
+              {/* Manager Pass Status Row */}
+              <div className="mt-3 flex items-center justify-between flex-wrap gap-2 text-xs">
+                <div className="flex items-center gap-1.5 text-slate-400 text-[11px] overflow-x-auto pb-0.5">
+                  <span className="font-medium text-slate-400">Pass status:</span>
+                  {room.passedTeams && room.passedTeams.length > 0 ? (
+                    room.passedTeams.map((tId) => (
+                      <span
+                        key={tId}
+                        className="px-2 py-0.5 rounded-md bg-rose-500/15 border border-rose-500/30 text-rose-300 font-bold flex items-center gap-1"
+                      >
+                        <span>{getTeam(tId).shortName}</span>
+                        <span>✕</span>
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-slate-600 italic">No managers passed yet</span>
+                  )}
+                </div>
+                <span className="text-[10px] text-slate-500">
+                  {room.passedTeams?.length || 0} / {room.players?.length || 0} passed
+                </span>
+              </div>
+
+              {/* SOLD / UNSOLD OVERLAY BANNER */}
+              {room.lastSale && (
+                <div className="absolute inset-0 z-20 bg-slate-950/95 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center animate-in fade-in zoom-in-95 duration-200">
+                  {room.lastSale.unsold ? (
+                    <div className="space-y-2">
+                      <div className="text-5xl">🚫</div>
+                      <div className="text-2xl md:text-3xl font-black text-rose-400 uppercase tracking-wider">
+                        HAMMER DOWN — UNSOLD!
+                      </div>
+                      <p className="text-sm text-slate-400 max-w-sm mx-auto">
+                        <b>{room.lastSale.player?.name}</b> received no bids and moves to the Unsold Pool.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="text-5xl animate-bounce">🔨</div>
+                      <div className="inline-block px-4 py-1 rounded-full text-xs font-black tracking-widest uppercase bg-amber-400 text-slate-950 shadow-lg">
+                        {room.lastSale.viaRTM ? "⚔️ RIGHT TO MATCH (RTM) EXERCISED!" : "🏆 SOLD!"}
+                      </div>
+                      <div className="text-3xl md:text-5xl font-black text-white">
+                        {room.lastSale.player?.name}
+                      </div>
+
+                      <div className="flex items-center justify-center gap-4 p-4 bg-slate-900 border border-slate-800 rounded-2xl shadow-xl max-w-md mx-auto">
+                        <span className="text-4xl">{getTeam(room.lastSale.buyerTeamId).logoEmoji}</span>
+                        <div className="text-left">
+                          <div className="text-[10px] uppercase font-bold text-slate-400">Winning Franchise</div>
+                          <div className="text-lg font-black text-white leading-tight">
+                            {getTeam(room.lastSale.buyerTeamId).name}
+                          </div>
+                          <div className="text-xs text-slate-400">
+                            Manager: <b className="text-slate-200">{room.teamsState[room.lastSale.buyerTeamId]?.ownerName}</b>
+                          </div>
+                        </div>
+
+                        <div className="border-l border-slate-800 pl-4 text-right">
+                          <div className="text-[10px] uppercase font-bold text-slate-400">Price</div>
+                          <div className="text-xl font-black text-amber-400 font-mono">
+                            ₹{Number(room.lastSale.amount).toFixed(2)} Cr
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="text-xs text-slate-500 pt-2 animate-pulse font-medium">
+                        Loading next player in set...
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ) : (
             <div className="p-16 text-center text-slate-500 bg-slate-900 rounded-3xl border border-slate-800">
@@ -246,6 +320,7 @@ export default function AuctionArena({
             currentPlayer={currentPlayer}
             myTeamId={myTeamId}
             myTeamState={myTeamState}
+            passedTeams={room.passedTeams || []}
             settings={room.settings}
             isHost={myPlayer?.isHost}
             onPlaceBid={onPlaceBid}
