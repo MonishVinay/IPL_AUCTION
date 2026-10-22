@@ -1,0 +1,20 @@
+{
+  "name": "ipl-auction-game",
+  "version": "1.0.0",
+  "description": "Multiplayer IPL Mega Auction Game with Retentions, RTM Cards & Playing XI Builder",
+  "main": "server/server.js",
+  "scripts": {
+    "build": "cd client && npm install && npm run build",
+    "start": "node server/server.js",
+    "dev:server": "node server/server.js",
+    "dev:client": "cd client && npm run dev"
+  },
+  "keywords": ["ipl", "auction", "multiplayer", "game", "cricket"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "socket.io": "^4.8.1"
+  }
+}

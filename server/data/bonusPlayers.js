@@ -1,0 +1,42 @@
+// Bonus / Free Agent Star Players (36 players)
+// Can be toggled ON or OFF in the Host Game Settings
+const BONUS_PLAYERS = [
+  { id: "bonus_1", name: "Glenn Maxwell", role: "ALL", isOverseas: true, isKeyPlayer: true, originalTeamId: null, basePrice: 2.0, rating: 91, isBonus: true },
+  { id: "bonus_2", name: "Faf du Plessis", role: "BAT", isOverseas: true, isKeyPlayer: true, originalTeamId: null, basePrice: 2.0, rating: 90, isBonus: true },
+  { id: "bonus_3", name: "David Warner", role: "BAT", isOverseas: true, isKeyPlayer: true, originalTeamId: null, basePrice: 2.0, rating: 91, isBonus: true },
+  { id: "bonus_4", name: "Kane Williamson", role: "BAT", isOverseas: true, isKeyPlayer: true, originalTeamId: null, basePrice: 2.0, rating: 90, isBonus: true },
+  { id: "bonus_5", name: "Steve Smith", role: "BAT", isOverseas: true, isKeyPlayer: true, originalTeamId: null, basePrice: 2.0, rating: 89, isBonus: true },
+  { id: "bonus_6", name: "Jonny Bairstow", role: "WK", isOverseas: true, isKeyPlayer: true, originalTeamId: null, basePrice: 2.0, rating: 90, isBonus: true },
+  { id: "bonus_7", name: "Daryl Mitchell", role: "ALL", isOverseas: true, isKeyPlayer: true, originalTeamId: null, basePrice: 2.0, rating: 87, isBonus: true },
+  { id: "bonus_8", name: "Devon Conway", role: "WK", isOverseas: true, isKeyPlayer: true, originalTeamId: null, basePrice: 2.0, rating: 90, isBonus: true },
+  { id: "bonus_9", name: "Moeen Ali", role: "ALL", isOverseas: true, isKeyPlayer: true, originalTeamId: null, basePrice: 2.0, rating: 88, isBonus: true },
+  { id: "bonus_10", name: "Harry Brook", role: "BAT", isOverseas: true, isKeyPlayer: true, originalTeamId: null, basePrice: 2.0, rating: 89, isBonus: true },
+  { id: "bonus_11", name: "Sikandar Raza", role: "ALL", isOverseas: true, isKeyPlayer: false, originalTeamId: null, basePrice: 1.5, rating: 85, isBonus: true },
+  { id: "bonus_12", name: "Jason Roy", role: "BAT", isOverseas: true, isKeyPlayer: false, originalTeamId: null, basePrice: 1.5, rating: 86, isBonus: true },
+  { id: "bonus_13", name: "Mark Wood", role: "PACE", isOverseas: true, isKeyPlayer: false, originalTeamId: null, basePrice: 2.0, rating: 89, isBonus: true },
+  { id: "bonus_14", name: "Alzarri Joseph", role: "PACE", isOverseas: true, isKeyPlayer: false, originalTeamId: null, basePrice: 1.5, rating: 84, isBonus: true },
+  { id: "bonus_15", name: "Gerald Coetzee", role: "PACE", isOverseas: true, isKeyPlayer: false, originalTeamId: null, basePrice: 1.5, rating: 86, isBonus: true },
+  { id: "bonus_16", name: "Naveen-ul-Haq", role: "PACE", isOverseas: true, isKeyPlayer: false, originalTeamId: null, basePrice: 1.5, rating: 84, isBonus: true },
+  { id: "bonus_17", name: "Rahmanullah Gurbaz", role: "WK", isOverseas: true, isKeyPlayer: false, originalTeamId: null, basePrice: 1.5, rating: 84, isBonus: true },
+  { id: "bonus_18", name: "Maheesh Theekshana", role: "SPIN", isOverseas: true, isKeyPlayer: false, originalTeamId: null, basePrice: 2.0, rating: 88, isBonus: true },
+  { id: "bonus_19", name: "Dilshan Madushanka", role: "PACE", isOverseas: true, isKeyPlayer: false, originalTeamId: null, basePrice: 1.0, rating: 82, isBonus: true },
+  { id: "bonus_20", name: "James Neesham", role: "ALL", isOverseas: true, isKeyPlayer: false, originalTeamId: null, basePrice: 1.5, rating: 83, isBonus: true },
+  { id: "bonus_21", name: "Tim Southee", role: "PACE", isOverseas: true, isKeyPlayer: false, originalTeamId: null, basePrice: 1.5, rating: 85, isBonus: true },
+  { id: "bonus_22", name: "Adil Rashid", role: "SPIN", isOverseas: true, isKeyPlayer: false, originalTeamId: null, basePrice: 1.5, rating: 87, isBonus: true },
+  { id: "bonus_23", name: "Chris Woakes", role: "ALL", isOverseas: true, isKeyPlayer: false, originalTeamId: null, basePrice: 1.5, rating: 84, isBonus: true },
+  { id: "bonus_24", name: "Tabraiz Shamsi", role: "SPIN", isOverseas: true, isKeyPlayer: false, originalTeamId: null, basePrice: 1.0, rating: 83, isBonus: true },
+  { id: "bonus_25", name: "Keshav Maharaj", role: "SPIN", isOverseas: true, isKeyPlayer: false, originalTeamId: null, basePrice: 1.0, rating: 84, isBonus: true },
+  { id: "bonus_26", name: "Gus Atkinson", role: "PACE", isOverseas: true, isKeyPlayer: false, originalTeamId: null, basePrice: 1.5, rating: 85, isBonus: true },
+  { id: "bonus_27", name: "Spencer Johnson", role: "PACE", isOverseas: true, isKeyPlayer: false, originalTeamId: null, basePrice: 1.0, rating: 83, isBonus: true },
+  { id: "bonus_28", name: "Mayank Agarwal", role: "BAT", isOverseas: false, isKeyPlayer: false, originalTeamId: null, basePrice: 1.0, rating: 83, isBonus: true },
+  { id: "bonus_29", name: "Cheteshwar Pujara", role: "BAT", isOverseas: false, isKeyPlayer: false, originalTeamId: null, basePrice: 0.75, rating: 81, isBonus: true },
+  { id: "bonus_30", name: "Hanuma Vihari", role: "ALL", isOverseas: false, isKeyPlayer: false, originalTeamId: null, basePrice: 0.75, rating: 80, isBonus: true },
+  { id: "bonus_31", name: "Chetan Sakariya", role: "PACE", isOverseas: false, isKeyPlayer: false, originalTeamId: null, basePrice: 0.75, rating: 81, isBonus: true },
+  { id: "bonus_32", name: "Sandeep Warrier", role: "PACE", isOverseas: false, isKeyPlayer: false, originalTeamId: null, basePrice: 0.5, rating: 79, isBonus: true },
+  { id: "bonus_33", name: "Shahbaz Nadeem", role: "SPIN", isOverseas: false, isKeyPlayer: false, originalTeamId: null, basePrice: 0.5, rating: 78, isBonus: true },
+  { id: "bonus_34", name: "Siddharth Kaul", role: "PACE", isOverseas: false, isKeyPlayer: false, originalTeamId: null, basePrice: 0.5, rating: 79, isBonus: true },
+  { id: "bonus_35", name: "Sheldon Jackson", role: "WK", isOverseas: false, isKeyPlayer: false, originalTeamId: null, basePrice: 0.3, rating: 77, isBonus: true },
+  { id: "bonus_36", name: "Baba Indrajith", role: "BAT", isOverseas: false, isKeyPlayer: false, originalTeamId: null, basePrice: 0.3, rating: 77, isBonus: true }
+];
+
+module.exports = { BONUS_PLAYERS };
