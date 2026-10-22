@@ -745,16 +745,25 @@ class GameManager {
     });
 
     room.timer = setInterval(() => {
+      if (!room.rtmState) {
+        this.clearRoomTimer(room);
+        return;
+      }
       room.rtmState.timeLeft -= 1;
       this.io.to(room.code).emit("rtm_timer_tick", { timeLeft: room.rtmState.timeLeft });
 
       if (room.rtmState.timeLeft <= 0) {
         this.clearRoomTimer(room);
+        const rtmChallenge = { ...room.rtmState };
+        room.status = "AUCTION";
+        room.rtmState = null;
+
         this.io.to(room.code).emit("rtm_declined", {
-          origTeamId,
+          origTeamId: rtmChallenge.origTeamId,
+          winningTeamId: rtmChallenge.winningTeamId,
           reason: "Time Expired"
         });
-        this.finalizeSale(room, winningTeamId, room.currentBid, false);
+        this.finalizeSale(room, rtmChallenge.winningTeamId, rtmChallenge.matchAmount, false);
       }
     }, 1000);
   }
@@ -774,23 +783,31 @@ class GameManager {
 
     this.clearRoomTimer(room);
 
+    // Snapshot RTM details and immediately reset room state to prevent re-triggering or stale modal
+    const rtmChallenge = { ...room.rtmState };
+    room.status = "AUCTION";
+    room.rtmState = null;
+
     if (exerciseRTM) {
-      const origTeamState = room.teamsState[room.rtmState.origTeamId];
-      origTeamState.rtmCardsLeft = Math.max(0, origTeamState.rtmCardsLeft - 1);
+      const origTeamState = room.teamsState[rtmChallenge.origTeamId];
+      if (origTeamState) {
+        origTeamState.rtmCardsLeft = Math.max(0, origTeamState.rtmCardsLeft - 1);
+      }
 
       this.io.to(room.code).emit("rtm_exercised", {
-        teamId: room.rtmState.origTeamId,
+        teamId: rtmChallenge.origTeamId,
         player: room.currentPlayer,
-        amount: room.rtmState.matchAmount
+        amount: rtmChallenge.matchAmount
       });
 
-      this.finalizeSale(room, room.rtmState.origTeamId, room.rtmState.matchAmount, true);
+      this.finalizeSale(room, rtmChallenge.origTeamId, rtmChallenge.matchAmount, true);
     } else {
       this.io.to(room.code).emit("rtm_declined", {
-        origTeamId: room.rtmState.origTeamId,
+        origTeamId: rtmChallenge.origTeamId,
+        winningTeamId: rtmChallenge.winningTeamId,
         reason: "Declined by Franchise"
       });
-      this.finalizeSale(room, room.rtmState.winningTeamId, room.rtmState.matchAmount, false);
+      this.finalizeSale(room, rtmChallenge.winningTeamId, rtmChallenge.matchAmount, false);
     }
 
     return { success: true };
@@ -798,6 +815,8 @@ class GameManager {
 
   finalizeSale(room, buyerTeamId, amount, viaRTM = false) {
     this.clearRoomTimer(room);
+    room.status = "AUCTION";
+    room.rtmState = null;
 
     const buyer = room.teamsState[buyerTeamId];
     if (buyer) {

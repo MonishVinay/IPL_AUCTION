@@ -1,8 +1,10 @@
-import React from "react";
+import React, { useState } from "react";
 import { getTeam } from "../teamsData";
 import { ShieldAlert, Check, X, Clock, Sparkles } from "lucide-react";
 
 export default function RTMModal({ rtmState, playerId, onRespondRTM }) {
+  const [submitting, setSubmitting] = useState(false);
+
   if (!rtmState) return null;
 
   const { player, origTeamId, winningTeamId, matchAmount, timeLeft } = rtmState;
@@ -10,6 +12,12 @@ export default function RTMModal({ rtmState, playerId, onRespondRTM }) {
   const winningTeam = getTeam(winningTeamId);
 
   const isMyTeamOrig = origTeamId === playerId || origTeamId === rtmState.origTeamIdPlayerTeam;
+
+  const handleAction = (exercise) => {
+    if (submitting) return;
+    setSubmitting(true);
+    onRespondRTM(exercise);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in duration-200">
@@ -79,16 +87,18 @@ export default function RTMModal({ rtmState, playerId, onRespondRTM }) {
 
               <div className="grid grid-cols-2 gap-3">
                 <button
-                  onClick={() => onRespondRTM(false)}
-                  className="py-3 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-2xl border border-slate-700 transition flex items-center justify-center gap-2 text-sm"
+                  disabled={submitting}
+                  onClick={() => handleAction(false)}
+                  className="py-3 px-4 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-300 font-semibold rounded-2xl border border-slate-700 transition flex items-center justify-center gap-2 text-sm"
                 >
                   <X className="w-4 h-4 text-rose-400" />
                   <span>Pass (Let Go)</span>
                 </button>
 
                 <button
-                  onClick={() => onRespondRTM(true)}
-                  className="py-3 px-4 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black rounded-2xl shadow-lg shadow-amber-500/20 transition flex items-center justify-center gap-2 text-sm"
+                  disabled={submitting}
+                  onClick={() => handleAction(true)}
+                  className="py-3 px-4 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 disabled:opacity-50 text-slate-950 font-black rounded-2xl shadow-lg shadow-amber-500/20 transition flex items-center justify-center gap-2 text-sm"
                 >
                   <Check className="w-4 h-4 stroke-[3]" />
                   <span>Match with RTM!</span>

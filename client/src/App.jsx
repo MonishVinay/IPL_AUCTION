@@ -158,6 +158,8 @@ export default function App() {
         if (!prev) return prev;
         return {
           ...prev,
+          status: "AUCTION",
+          rtmState: null,
           teamsState: data.teamsState,
           soldCount: (prev.soldCount || 0) + 1,
           lastSale: {
@@ -216,9 +218,30 @@ export default function App() {
       });
     });
 
-    // 10. RTM Exercised or Declined
+    // 10. RTM Exercised
     socket.on("rtm_exercised", () => {
+      setRoom((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          status: "AUCTION",
+          rtmState: null
+        };
+      });
       sounds.playSold();
+    });
+
+    // 10b. RTM Declined
+    socket.on("rtm_declined", () => {
+      setRoom((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          status: "AUCTION",
+          rtmState: null
+        };
+      });
+      sounds.playGavel();
     });
 
     // 11. Accelerated Round Started
@@ -264,6 +287,7 @@ export default function App() {
       socket.off("rtm_challenge_started");
       socket.off("rtm_timer_tick");
       socket.off("rtm_exercised");
+      socket.off("rtm_declined");
       socket.off("accelerated_round_started");
       socket.off("auction_completed");
     };
@@ -367,6 +391,11 @@ export default function App() {
   };
 
   const handleRespondRTM = (exerciseRTM) => {
+    // Immediately close modal optimistically so buttons cannot be double-clicked
+    setRoom((prev) => {
+      if (!prev) return prev;
+      return { ...prev, status: "AUCTION", rtmState: null };
+    });
     socket.emit("respond_rtm", { exerciseRTM, roomCode: room?.code, playerId });
   };
 
