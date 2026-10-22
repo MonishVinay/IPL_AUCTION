@@ -1,6 +1,6 @@
 import React from "react";
 import { getTeam } from "../teamsData";
-import { Sparkles, Clock, FastForward, Users, ArrowRight, Shield } from "lucide-react";
+import { Sparkles, Clock, FastForward, Users, ArrowRight, Shield, LogOut } from "lucide-react";
 
 export default function PoolPreview({
   pool,
@@ -9,7 +9,8 @@ export default function PoolPreview({
   timeLeft,
   pools,
   isHost,
-  onSkipPreview
+  onSkipPreview,
+  onLeaveRoom
 }) {
   if (!pool) return null;
 
@@ -100,6 +101,21 @@ export default function PoolPreview({
               >
                 <FastForward className="w-4 h-4 fill-slate-950" />
                 <span>Start Set Now</span>
+              </button>
+            )}
+
+            {onLeaveRoom && (
+              <button
+                onClick={() => {
+                  try {
+                    localStorage.removeItem("ipl_auction_session");
+                  } catch (e) {}
+                  onLeaveRoom();
+                }}
+                title="Leave Room"
+                className="p-3 bg-slate-950/80 hover:bg-red-950/40 border border-slate-800 hover:border-red-800/50 rounded-2xl text-slate-400 hover:text-red-300 transition"
+              >
+                <LogOut className="w-5 h-5" />
               </button>
             )}
           </div>

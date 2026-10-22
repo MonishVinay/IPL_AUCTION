@@ -44,26 +44,33 @@ export default function App() {
             if (res?.success) {
               setPlayerId(res.playerId);
               setRoom(res.room);
+            } else {
+              localStorage.removeItem(SESSION_KEY);
             }
           });
         }
-      } catch (e) {}
+      } catch (e) {
+        localStorage.removeItem(SESSION_KEY);
+      }
     };
 
     socket.on("connect", handleSocketConnect);
 
     // 1. Room updates
     socket.on("room_updated", ({ room }) => {
+      if (!localStorage.getItem(SESSION_KEY)) return;
       setRoom(room);
     });
 
     // 2. Game Phase Changed
     socket.on("game_phase_changed", ({ room }) => {
+      if (!localStorage.getItem(SESSION_KEY)) return;
       setRoom(room);
     });
 
     // 2b. Pool Preview Started
     socket.on("pool_preview_started", (data) => {
+      if (!localStorage.getItem(SESSION_KEY)) return;
       setRoom((prev) => {
         if (!prev) return prev;
         return {
@@ -79,6 +86,7 @@ export default function App() {
 
     // 2c. Pool Preview Tick
     socket.on("pool_preview_tick", ({ timeLeft }) => {
+      if (!localStorage.getItem(SESSION_KEY)) return;
       setRoom((prev) => {
         if (!prev) return prev;
         return {
@@ -90,6 +98,7 @@ export default function App() {
 
     // 3. Player Presented in Auction
     socket.on("player_presented", (data) => {
+      if (!localStorage.getItem(SESSION_KEY)) return;
       setRoom((prev) => {
         if (!prev) return prev;
         return {
@@ -114,6 +123,7 @@ export default function App() {
 
     // 4. Bid Updated
     socket.on("bid_updated", (data) => {
+      if (!localStorage.getItem(SESSION_KEY)) return;
       setRoom((prev) => {
         if (!prev) return prev;
         return {
@@ -130,6 +140,7 @@ export default function App() {
 
     // 4b. Team Passed
     socket.on("team_passed", ({ passedTeams }) => {
+      if (!localStorage.getItem(SESSION_KEY)) return;
       setRoom((prev) => {
         if (!prev) return prev;
         return { ...prev, passedTeams: passedTeams || [] };
@@ -138,11 +149,13 @@ export default function App() {
 
     // 4c. All Teams Passed Fast Forward
     socket.on("all_teams_passed", () => {
+      if (!localStorage.getItem(SESSION_KEY)) return;
       sounds.playGavel();
     });
 
     // 5. Timer Tick
     socket.on("timer_tick", ({ timeLeft }) => {
+      if (!localStorage.getItem(SESSION_KEY)) return;
       setRoom((prev) => {
         if (!prev) return prev;
         return { ...prev, timeLeft };
@@ -154,6 +167,7 @@ export default function App() {
 
     // 6. Player Sold
     socket.on("player_sold", (data) => {
+      if (!localStorage.getItem(SESSION_KEY)) return;
       setRoom((prev) => {
         if (!prev) return prev;
         return {
@@ -177,6 +191,7 @@ export default function App() {
 
     // 7. Player Unsold
     socket.on("player_unsold", (data) => {
+      if (!localStorage.getItem(SESSION_KEY)) return;
       setRoom((prev) => {
         if (!prev) return prev;
         return {
@@ -193,6 +208,7 @@ export default function App() {
 
     // 8. RTM Challenge Started
     socket.on("rtm_challenge_started", ({ rtmState }) => {
+      if (!localStorage.getItem(SESSION_KEY)) return;
       setRoom((prev) => {
         if (!prev) return prev;
         return {
@@ -206,6 +222,7 @@ export default function App() {
 
     // 9. RTM Timer Tick
     socket.on("rtm_timer_tick", ({ timeLeft }) => {
+      if (!localStorage.getItem(SESSION_KEY)) return;
       setRoom((prev) => {
         if (!prev || !prev.rtmState) return prev;
         return {
@@ -220,6 +237,7 @@ export default function App() {
 
     // 10. RTM Exercised
     socket.on("rtm_exercised", () => {
+      if (!localStorage.getItem(SESSION_KEY)) return;
       setRoom((prev) => {
         if (!prev) return prev;
         return {
@@ -233,6 +251,7 @@ export default function App() {
 
     // 10b. RTM Declined
     socket.on("rtm_declined", () => {
+      if (!localStorage.getItem(SESSION_KEY)) return;
       setRoom((prev) => {
         if (!prev) return prev;
         return {
@@ -246,6 +265,7 @@ export default function App() {
 
     // 11. Accelerated Round Started
     socket.on("accelerated_round_started", ({ count }) => {
+      if (!localStorage.getItem(SESSION_KEY)) return;
       setRoom((prev) => {
         if (!prev) return prev;
         return {
@@ -260,6 +280,7 @@ export default function App() {
 
     // 12. Auction Completed
     socket.on("auction_completed", (data) => {
+      if (!localStorage.getItem(SESSION_KEY)) return;
       setRoom((prev) => {
         if (!prev) return prev;
         return {
@@ -333,8 +354,10 @@ export default function App() {
   const handleLeaveRoom = () => {
     try {
       localStorage.removeItem(SESSION_KEY);
+      localStorage.removeItem("ipl_auction_session");
+      localStorage.clear();
     } catch (e) {}
-    socket.emit("leave_room");
+    socket.emit("leave_room", { roomCode: room?.code, playerId });
     setRoom(null);
     setPlayerId(null);
   };
@@ -464,6 +487,7 @@ export default function App() {
         pools={room.pools}
         isHost={myPlayer?.isHost}
         onSkipPreview={handleSkipPoolPreview}
+        onLeaveRoom={handleLeaveRoom}
       />
     );
   }

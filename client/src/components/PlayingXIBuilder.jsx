@@ -126,9 +126,10 @@ export default function PlayingXIBuilder({
           {onLeaveRoom && (
             <button
               onClick={() => {
-                if (window.confirm("Exit this auction room and return to home?")) {
-                  onLeaveRoom();
-                }
+                try {
+                  localStorage.removeItem("ipl_auction_session");
+                } catch (e) {}
+                onLeaveRoom();
               }}
               className="px-4 py-2.5 rounded-xl font-bold text-xs bg-red-950/40 hover:bg-red-900/60 text-red-300 border border-red-800/50 transition flex items-center gap-1.5"
             >

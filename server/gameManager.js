@@ -157,18 +157,19 @@ class GameManager {
     return info;
   }
 
-  leaveRoom(socketId) {
-    const info = this.playerSockets.get(socketId);
+  leaveRoom(socketId, roomCode = null, playerId = null) {
+    const info = this.playerSockets.get(socketId) || (roomCode && playerId ? { roomCode: roomCode.toUpperCase().trim(), playerId } : null);
+    this.playerSockets.delete(socketId);
+
     if (!info) return { success: true };
 
     const room = this.rooms.get(info.roomCode);
-    this.playerSockets.delete(socketId);
-
     if (!room) return { success: true };
 
     const playerIndex = room.players.findIndex((p) => p.id === info.playerId);
     if (playerIndex >= 0) {
       const player = room.players[playerIndex];
+      player.isConnected = false;
 
       if (room.status === "LOBBY") {
         room.players.splice(playerIndex, 1);
@@ -183,6 +184,12 @@ class GameManager {
         }
         this.io.to(room.code).emit("player_left", {
           playerId: player.id,
+          room: this.getSanitizedRoom(room)
+        });
+      } else {
+        this.io.to(room.code).emit("player_left", {
+          playerId: player.id,
+          playerName: player.name,
           room: this.getSanitizedRoom(room)
         });
       }

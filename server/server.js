@@ -91,10 +91,20 @@ io.on("connection", (socket) => {
   });
 
   // 2c. Explicit Leave Room
-  socket.on("leave_room", (callback) => {
+  socket.on("leave_room", (data, callback) => {
     try {
-      const result = gameManager.leaveRoom(socket.id);
-      if (typeof callback === "function") callback(result);
+      const cb = typeof data === "function" ? data : (typeof callback === "function" ? callback : null);
+      const payload = typeof data === "object" && data !== null ? data : {};
+
+      const info = gameManager.playerSockets.get(socket.id);
+      const roomCode = payload.roomCode || info?.roomCode;
+
+      if (roomCode) {
+        socket.leave(roomCode);
+      }
+
+      const result = gameManager.leaveRoom(socket.id, roomCode, payload.playerId);
+      if (cb) cb(result);
     } catch (err) {
       if (typeof callback === "function") callback({ error: err.message });
     }
