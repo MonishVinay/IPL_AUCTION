@@ -259,6 +259,16 @@ io.on("connection", (socket) => {
     }
   });
 
+  // 15. End Current Bid / Hammer Down (Host only)
+  socket.on("end_bid", ({ roomCode, playerId } = {}, callback) => {
+    try {
+      const result = gameManager.endCurrentBid(socket.id, roomCode, playerId);
+      if (typeof callback === "function") callback(result);
+    } catch (err) {
+      if (typeof callback === "function") callback({ error: err.message });
+    }
+  });
+
   // Disconnect
   socket.on("disconnect", () => {
     gameManager.handleDisconnect(socket.id);

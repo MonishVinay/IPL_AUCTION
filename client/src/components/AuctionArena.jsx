@@ -11,6 +11,7 @@ export default function AuctionArena({
   onPassTurn,
   onSkipPlayer,
   onSkipPool,
+  onEndBid,
   onLeaveRoom,
   soundEnabled,
   onToggleSound
@@ -344,6 +345,7 @@ export default function AuctionArena({
             onPassTurn={onPassTurn}
             onSkipPlayer={onSkipPlayer}
             onSkipPool={onSkipPool}
+            onEndBid={onEndBid}
           />
         </div>
 

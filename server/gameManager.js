@@ -918,6 +918,24 @@ class GameManager {
     return { success: true };
   }
 
+  endCurrentBid(socketId, roomCode = null, playerId = null) {
+    const info = this.ensurePlayerInRoom(socketId, roomCode, playerId);
+    if (!info) return { error: "Not in room" };
+    const room = this.rooms.get(info.roomCode);
+    if (!room || room.status !== "AUCTION" || !room.currentPlayer) {
+      return { error: "No active bidding round right now." };
+    }
+
+    const player = room.players.find((p) => p.id === info.playerId);
+    if (!player || !player.isHost) {
+      return { error: "Only the host can end the current bid." };
+    }
+
+    this.clearRoomTimer(room);
+    this.handleGavelStrike(room);
+    return { success: true };
+  }
+
   reAuctionUnsold(socketId, roomCode = null, playerId = null) {
     const info = this.ensurePlayerInRoom(socketId, roomCode, playerId);
     if (!info) return { error: "Not in room" };

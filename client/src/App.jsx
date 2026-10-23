@@ -447,6 +447,12 @@ export default function App() {
     });
   };
 
+  const handleEndBid = () => {
+    socket.emit("end_bid", { roomCode: room?.code, playerId }, (res) => {
+      if (res?.error) alert(res.error);
+    });
+  };
+
   const toggleSound = () => {
     const next = sounds.toggle();
     setSoundEnabled(next);
@@ -521,6 +527,7 @@ export default function App() {
           onPassTurn={handlePassTurn}
           onSkipPlayer={handleSkipPlayer}
           onSkipPool={handleSkipPool}
+          onEndBid={handleEndBid}
           onLeaveRoom={handleLeaveRoom}
           soundEnabled={soundEnabled}
           onToggleSound={toggleSound}

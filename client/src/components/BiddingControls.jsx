@@ -13,7 +13,8 @@ export default function BiddingControls({
   onPlaceBid,
   onPassTurn,
   onSkipPlayer,
-  onSkipPool
+  onSkipPool,
+  onEndBid
 }) {
   const [customInput, setCustomInput] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
@@ -179,7 +180,18 @@ export default function BiddingControls({
         </button>
 
         {isHost && (
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {onEndBid && (
+              <button
+                onClick={onEndBid}
+                title="End current bid immediately: strikes gavel and sells to highest bidder, or marks unsold"
+                className="px-3 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-black rounded-xl shadow-md transition flex items-center gap-1"
+              >
+                <Gavel className="w-3.5 h-3.5" />
+                <span>End Bid</span>
+              </button>
+            )}
+
             <button
               onClick={onSkipPlayer}
               title="Host skip current player"
