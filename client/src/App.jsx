@@ -96,6 +96,12 @@ export default function App() {
       });
     });
 
+    // 2d. Pool Skipped
+    socket.on("pool_skipped", () => {
+      if (!localStorage.getItem(SESSION_KEY)) return;
+      sounds.playGavel();
+    });
+
     // 3. Player Presented in Auction
     socket.on("player_presented", (data) => {
       if (!localStorage.getItem(SESSION_KEY)) return;
@@ -298,6 +304,7 @@ export default function App() {
       socket.off("game_phase_changed");
       socket.off("pool_preview_started");
       socket.off("pool_preview_tick");
+      socket.off("pool_skipped");
       socket.off("player_presented");
       socket.off("bid_updated");
       socket.off("team_passed");
@@ -434,6 +441,12 @@ export default function App() {
     });
   };
 
+  const handleSkipPool = () => {
+    socket.emit("skip_pool", { roomCode: room?.code, playerId }, (res) => {
+      if (res?.error) alert(res.error);
+    });
+  };
+
   const toggleSound = () => {
     const next = sounds.toggle();
     setSoundEnabled(next);
@@ -487,6 +500,7 @@ export default function App() {
         pools={room.pools}
         isHost={myPlayer?.isHost}
         onSkipPreview={handleSkipPoolPreview}
+        onSkipPool={handleSkipPool}
         onLeaveRoom={handleLeaveRoom}
       />
     );
@@ -506,6 +520,7 @@ export default function App() {
           onPlaceBid={handlePlaceBid}
           onPassTurn={handlePassTurn}
           onSkipPlayer={handleSkipPlayer}
+          onSkipPool={handleSkipPool}
           onLeaveRoom={handleLeaveRoom}
           soundEnabled={soundEnabled}
           onToggleSound={toggleSound}

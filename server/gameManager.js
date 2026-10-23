@@ -473,7 +473,7 @@ class GameManager {
     room.currentPool = room.pools[poolIndex];
     room.currentPoolPlayerIndex = -1;
     room.status = "POOL_PREVIEW";
-    room.poolPreviewTimeLeft = room.settings.poolPreviewSeconds || 8;
+    room.poolPreviewTimeLeft = 0;
     room.currentPlayer = null;
     room.currentBid = 0;
     room.currentBidder = null;
@@ -481,22 +481,13 @@ class GameManager {
     room.rtmState = null;
     room.lastSale = null;
 
+    // Broadcast pool preview to all players (Host decides when to close the list and start)
     this.io.to(room.code).emit("pool_preview_started", {
       pool: room.currentPool,
       poolIndex: room.currentPoolIndex,
       totalPools: room.pools.length,
-      timeLeft: room.poolPreviewTimeLeft
+      timeLeft: 0
     });
-
-    room.timer = setInterval(() => {
-      room.poolPreviewTimeLeft -= 1;
-      this.io.to(room.code).emit("pool_preview_tick", { timeLeft: room.poolPreviewTimeLeft });
-
-      if (room.poolPreviewTimeLeft <= 0) {
-        this.clearRoomTimer(room);
-        this.startCurrentPoolAuction(room);
-      }
-    }, 1000);
   }
 
   skipPoolPreview(socketId, roomCode = null, playerId = null) {
@@ -506,10 +497,61 @@ class GameManager {
     if (!room || room.status !== "POOL_PREVIEW") return { error: "Not in pool preview" };
 
     const player = room.players.find((p) => p.id === info.playerId);
-    if (!player || !player.isHost) return { error: "Only the host can advance the preview." };
+    if (!player || !player.isHost) return { error: "Only the host can start this pool." };
 
     this.clearRoomTimer(room);
     this.startCurrentPoolAuction(room);
+    return { success: true };
+  }
+
+  skipPool(socketId, roomCode = null, playerId = null) {
+    const info = this.ensurePlayerInRoom(socketId, roomCode, playerId);
+    if (!info) return { error: "Not in room" };
+    const room = this.rooms.get(info.roomCode);
+    if (!room) return { error: "Room not found" };
+
+    if (room.status !== "POOL_PREVIEW" && room.status !== "AUCTION" && room.status !== "RTM_CHALLENGE") {
+      return { error: "Cannot skip pool at this time." };
+    }
+
+    const player = room.players.find((p) => p.id === info.playerId);
+    if (!player || !player.isHost) {
+      return { error: "Only the host can skip a pool." };
+    }
+
+    this.clearRoomTimer(room);
+
+    // Collect remaining players in current pool and mark them as unsold
+    if (room.currentPool && Array.isArray(room.currentPool.players)) {
+      const startIndex = room.status === "POOL_PREVIEW"
+        ? 0
+        : Math.max(0, room.currentPoolPlayerIndex);
+      const remainingPlayers = room.currentPool.players.slice(startIndex);
+      if (remainingPlayers.length > 0) {
+        room.unsoldPool.push(...remainingPlayers);
+      }
+    }
+
+    room.currentPlayer = null;
+    room.currentBid = 0;
+    room.currentBidder = null;
+    room.passedTeams = [];
+    room.rtmState = null;
+    room.lastSale = null;
+
+    this.io.to(room.code).emit("pool_skipped", {
+      pool: room.currentPool,
+      poolIndex: room.currentPoolIndex,
+      unsoldPoolCount: room.unsoldPool.length
+    });
+
+    const nextIndex = room.currentPoolIndex + 1;
+    if (nextIndex < room.pools.length) {
+      this.startPoolPreview(room, nextIndex);
+    } else {
+      this.finishAuction(room);
+    }
+
     return { success: true };
   }
 

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Gavel, FastForward, AlertCircle, Plus, Check, X, ShieldAlert } from "lucide-react";
+import { Gavel, FastForward, SkipForward, AlertCircle, Plus, Check, X, ShieldAlert } from "lucide-react";
 
 export default function BiddingControls({
   currentBid,
@@ -12,7 +12,8 @@ export default function BiddingControls({
   isHost,
   onPlaceBid,
   onPassTurn,
-  onSkipPlayer
+  onSkipPlayer,
+  onSkipPool
 }) {
   const [customInput, setCustomInput] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
@@ -178,14 +179,31 @@ export default function BiddingControls({
         </button>
 
         {isHost && (
-          <button
-            onClick={onSkipPlayer}
-            title="Host skip player"
-            className="px-3 py-2 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-400 text-xs font-bold rounded-xl transition flex items-center gap-1"
-          >
-            <FastForward className="w-3.5 h-3.5" />
-            <span>Skip</span>
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={onSkipPlayer}
+              title="Host skip current player"
+              className="px-2.5 py-2 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-400 text-xs font-bold rounded-xl transition flex items-center gap-1"
+            >
+              <FastForward className="w-3.5 h-3.5" />
+              <span>Skip Player</span>
+            </button>
+
+            {onSkipPool && (
+              <button
+                onClick={() => {
+                  if (window.confirm("Skip remaining players in this pool and go to the next set?")) {
+                    onSkipPool();
+                  }
+                }}
+                title="Host skip entire remaining pool"
+                className="px-2.5 py-2 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 text-amber-400 text-xs font-bold rounded-xl transition flex items-center gap-1"
+              >
+                <SkipForward className="w-3.5 h-3.5" />
+                <span>Skip Pool</span>
+              </button>
+            )}
+          </div>
         )}
       </div>
 

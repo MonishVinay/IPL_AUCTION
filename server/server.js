@@ -249,6 +249,16 @@ io.on("connection", (socket) => {
     }
   });
 
+  // 14. Skip Entire Pool (Host only)
+  socket.on("skip_pool", ({ roomCode, playerId } = {}, callback) => {
+    try {
+      const result = gameManager.skipPool(socket.id, roomCode, playerId);
+      if (typeof callback === "function") callback(result);
+    } catch (err) {
+      if (typeof callback === "function") callback({ error: err.message });
+    }
+  });
+
   // Disconnect
   socket.on("disconnect", () => {
     gameManager.handleDisconnect(socket.id);

@@ -1,6 +1,6 @@
 import React from "react";
 import { getTeam } from "../teamsData";
-import { Sparkles, Clock, FastForward, Users, ArrowRight, Shield, LogOut } from "lucide-react";
+import { Sparkles, Clock, FastForward, SkipForward, Users, ArrowRight, Shield, LogOut } from "lucide-react";
 
 export default function PoolPreview({
   pool,
@@ -10,6 +10,7 @@ export default function PoolPreview({
   pools,
   isHost,
   onSkipPreview,
+  onSkipPool,
   onLeaveRoom
 }) {
   if (!pool) return null;
@@ -82,26 +83,38 @@ export default function PoolPreview({
             </p>
           </div>
 
-          {/* Countdown & Action */}
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-3 px-4 py-3 bg-slate-950/80 border border-slate-800 rounded-2xl">
-              <Clock className="w-5 h-5 text-amber-400" />
-              <div>
-                <div className="text-[10px] uppercase font-bold text-slate-400">Starting In</div>
-                <div className="text-2xl font-black text-amber-400 font-mono leading-none">
-                  {timeLeft}s
-                </div>
-              </div>
-            </div>
+          {/* Host Controls or Spectator Status (No auto-timer; Host decides when to close list and start) */}
+          <div className="flex items-center gap-2.5 flex-wrap">
+            {isHost ? (
+              <>
+                {onSkipPool && (
+                  <button
+                    onClick={() => {
+                      if (window.confirm("Skip this entire pool without auctioning it?")) {
+                        onSkipPool();
+                      }
+                    }}
+                    title="Skip entire pool"
+                    className="py-3 px-4 bg-slate-950/80 hover:bg-amber-500/10 border border-slate-800 hover:border-amber-500/40 text-slate-300 hover:text-amber-400 font-bold text-xs rounded-2xl transition flex items-center gap-1.5"
+                  >
+                    <SkipForward className="w-4 h-4 text-amber-400" />
+                    <span>Skip Pool</span>
+                  </button>
+                )}
 
-            {isHost && (
-              <button
-                onClick={onSkipPreview}
-                className="py-3 px-4 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-bold text-xs rounded-2xl shadow-lg shadow-amber-500/20 transition flex items-center gap-1.5"
-              >
-                <FastForward className="w-4 h-4 fill-slate-950" />
-                <span>Start Set Now</span>
-              </button>
+                <button
+                  onClick={onSkipPreview}
+                  className="py-3 px-5 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs rounded-2xl shadow-lg shadow-amber-500/20 transition flex items-center gap-2"
+                >
+                  <FastForward className="w-4 h-4 fill-slate-950" />
+                  <span>Close List & Start Pool</span>
+                </button>
+              </>
+            ) : (
+              <div className="flex items-center gap-2.5 px-4 py-3 bg-slate-950/80 border border-slate-800 rounded-2xl text-xs font-semibold text-slate-300">
+                <div className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
+                <span>Host is reviewing list • Waiting for host to close & start bidding</span>
+              </div>
             )}
 
             {onLeaveRoom && (
