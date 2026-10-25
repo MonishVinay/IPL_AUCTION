@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import confetti from "canvas-confetti";
-import { getTeam } from "../teamsData";
+import { getTeam, TEAMS } from "../teamsData";
 import {
   Trophy,
   Award,
@@ -17,7 +17,8 @@ import {
   ArrowDown,
   Zap,
   Flame,
-  Star
+  Star,
+  Eye
 } from "lucide-react";
 
 export default function PlayingXIBuilder({
@@ -31,13 +32,16 @@ export default function PlayingXIBuilder({
   const [viceCaptainId, setViceCaptainId] = useState(null);
   const [impactPlayerId, setImpactPlayerId] = useState(null);
   const [copied, setCopied] = useState(false);
-  const [activeTab, setActiveTab] = useState("PLAYING_XI"); // default to PLAYING_XI so users can build lineup right away
+  const [activeTab, setActiveTab] = useState("PLAYING_XI"); // "PLAYING_XI", "ALL_SQUADS", "LEADERBOARD"
 
   const myPlayer = room.players.find((p) => p.id === playerId);
   const myTeamId = myPlayer?.teamId;
   const myTeam = getTeam(myTeamId);
   const myTeamData = room.teamsState[myTeamId] || { squad: [], purse: 0 };
   const squad = myTeamData.squad || [];
+
+  const [viewTeamId, setViewTeamId] = useState(myTeamId || Object.keys(room.teamsState)[0] || "CSK");
+  const [squadRoleFilter, setSquadRoleFilter] = useState("ALL"); // "ALL", "BAT", "WK", "ALL_ROUNDER", "BOWL"
 
   // Trigger confetti on mounting
   useEffect(() => {
@@ -231,6 +235,23 @@ export default function PlayingXIBuilder({
     }
   };
 
+  const getRoleBadge = (role) => {
+    switch (role) {
+      case "BAT":
+        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30">BAT</span>;
+      case "WK":
+        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">WK</span>;
+      case "ALL":
+        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">ALL</span>;
+      case "PACE":
+        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">PACE</span>;
+      case "SPIN":
+        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-400 border border-purple-500/30">SPIN</span>;
+      default:
+        return null;
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8 flex flex-col">
       {/* Celebration Header */}
@@ -242,7 +263,7 @@ export default function PlayingXIBuilder({
           IPL MEGA AUCTION COMPLETE!
         </h1>
         <p className="text-slate-400 text-sm mt-1">
-          Review the auction stats, final league standings, and finalize your official Playing XI batting order.
+          Review the auction stats, inspect every franchise's full squad, and finalize your official Playing XI.
         </p>
 
         {/* 4 AUCTION SUMMARY STATS CARDS */}
@@ -349,6 +370,18 @@ export default function PlayingXIBuilder({
           </button>
 
           <button
+            onClick={() => setActiveTab("ALL_SQUADS")}
+            className={`px-5 py-2.5 rounded-xl font-bold text-xs transition flex items-center gap-2 ${
+              activeTab === "ALL_SQUADS"
+                ? "bg-amber-400 text-slate-950 shadow-lg shadow-amber-400/20"
+                : "bg-slate-900 text-slate-400 hover:bg-slate-800"
+            }`}
+          >
+            <Shield className="w-4 h-4" />
+            <span>All Franchise Squads</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab("LEADERBOARD")}
             className={`px-5 py-2.5 rounded-xl font-bold text-xs transition flex items-center gap-2 ${
               activeTab === "LEADERBOARD"
@@ -389,7 +422,7 @@ export default function PlayingXIBuilder({
             <div className="bg-slate-900/90 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl">
               <div className="px-6 py-4 bg-slate-950/80 border-b border-slate-800 flex items-center justify-between">
                 <span className="font-bold text-sm text-white">Final League Standings</span>
-                <span className="text-xs text-slate-400">Based on Squad Depth & Overall Rating</span>
+                <span className="text-xs text-slate-400">Click any franchise to inspect their full squad</span>
               </div>
 
               <div className="overflow-x-auto">
@@ -403,6 +436,7 @@ export default function PlayingXIBuilder({
                       <th className="py-3 px-4 text-center">Overseas</th>
                       <th className="py-3 px-4 text-right">Purse Left</th>
                       <th className="py-3 px-4 text-right">Rating</th>
+                      <th className="py-3 px-4 text-center">Full Squad</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/60 font-medium">
@@ -416,11 +450,17 @@ export default function PlayingXIBuilder({
                         <td className="py-4 px-4 font-mono">
                           {idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `#${idx + 1}`}
                         </td>
-                        <td className="py-4 px-4">
+                        <td
+                          className="py-4 px-4 cursor-pointer"
+                          onClick={() => {
+                            setViewTeamId(item.teamId);
+                            setActiveTab("ALL_SQUADS");
+                          }}
+                        >
                           <div className="flex items-center gap-2.5">
                             <span className="text-xl">{item.team.logoEmoji}</span>
                             <div>
-                              <div className="font-bold text-white">{item.team.name}</div>
+                              <div className="font-bold text-white hover:text-amber-400 transition">{item.team.name}</div>
                               <div className="text-[10px] text-slate-500">{item.team.shortName}</div>
                             </div>
                           </div>
@@ -428,10 +468,10 @@ export default function PlayingXIBuilder({
                         <td className="py-4 px-4 text-slate-300">
                           {item.ownerName} {item.teamId === myTeamId && "(You)"}
                         </td>
-                        <td className="py-4 px-4 text-center text-slate-300">
+                        <td className="py-4 px-4 text-center text-slate-300 font-mono">
                           {item.squadSize} / 25
                         </td>
-                        <td className="py-4 px-4 text-center text-sky-400">
+                        <td className="py-4 px-4 text-center text-sky-400 font-mono">
                           {item.overseasCount} / 8
                         </td>
                         <td className="py-4 px-4 text-right font-mono text-amber-400">
@@ -440,12 +480,283 @@ export default function PlayingXIBuilder({
                         <td className="py-4 px-4 text-right font-mono font-black text-sm text-emerald-400">
                           {item.overallRating} ★
                         </td>
+                        <td className="py-4 px-4 text-center">
+                          <button
+                            onClick={() => {
+                              setViewTeamId(item.teamId);
+                              setActiveTab("ALL_SQUADS");
+                            }}
+                            className="px-3 py-1.5 rounded-xl bg-amber-400/10 hover:bg-amber-400 text-amber-300 hover:text-slate-950 font-bold text-xs border border-amber-400/20 hover:border-amber-400 transition flex items-center gap-1 mx-auto shadow-sm"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>View Squad</span>
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
             </div>
+          </div>
+        ) : activeTab === "ALL_SQUADS" ? (
+          /* All Franchise Squads View */
+          <div className="space-y-6">
+            {/* Horizontal Franchise Tabs Bar */}
+            <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-3 shadow-xl flex items-center gap-2 overflow-x-auto pb-3">
+              {Object.keys(room.teamsState).map((tId) => {
+                const team = getTeam(tId);
+                const tState = room.teamsState[tId] || { squad: [] };
+                const isSelected = viewTeamId === tId;
+                const isMyTeam = tId === myTeamId;
+
+                return (
+                  <button
+                    key={tId}
+                    onClick={() => {
+                      setViewTeamId(tId);
+                      setSquadRoleFilter("ALL");
+                    }}
+                    className={`px-4 py-2.5 rounded-2xl font-bold text-xs flex items-center gap-2 shrink-0 transition-all ${
+                      isSelected
+                        ? "bg-amber-400 text-slate-950 shadow-lg shadow-amber-400/20 scale-[1.02]"
+                        : "bg-slate-950/80 hover:bg-slate-800 text-slate-300 border border-slate-800 hover:border-slate-700"
+                    }`}
+                  >
+                    <span className="text-base">{team.logoEmoji}</span>
+                    <span>{team.shortName}</span>
+                    <span
+                      className={`text-[10px] px-1.5 py-0.5 rounded-md font-mono ${
+                        isSelected ? "bg-slate-950 text-amber-300 font-black" : "bg-slate-800 text-slate-400"
+                      }`}
+                    >
+                      {tState.squad?.length || 0}
+                    </span>
+                    {isMyTeam && (
+                      <span
+                        className={`text-[9px] uppercase font-black px-1.5 py-0.5 rounded ${
+                          isSelected ? "bg-slate-900 text-amber-400" : "bg-amber-500/20 text-amber-300"
+                        }`}
+                      >
+                        You
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Selected Franchise Squad Showcase */}
+            {(() => {
+              const currentViewTeam = getTeam(viewTeamId);
+              const currentTeamState = room.teamsState[viewTeamId] || { squad: [], purse: 0, spent: 0 };
+              const currentSquad = currentTeamState.squad || [];
+
+              const currentBatters = currentSquad.filter((p) => p.role === "BAT");
+              const currentKeepers = currentSquad.filter((p) => p.role === "WK");
+              const currentAllrounders = currentSquad.filter((p) => p.role === "ALL");
+              const currentBowlers = currentSquad.filter((p) => p.role === "PACE" || p.role === "SPIN");
+              const currentOverseas = currentSquad.filter((p) => p.isOverseas).length;
+
+              const filteredSquad =
+                squadRoleFilter === "ALL"
+                  ? currentSquad
+                  : squadRoleFilter === "BAT"
+                  ? currentBatters
+                  : squadRoleFilter === "WK"
+                  ? currentKeepers
+                  : squadRoleFilter === "ALL_ROUNDER"
+                  ? currentAllrounders
+                  : currentBowlers;
+
+              const renderPlayerCard = (player, idx) => (
+                <div
+                  key={player.id + idx}
+                  className="p-3.5 bg-slate-950/90 rounded-2xl border border-slate-800/90 hover:border-slate-700 transition flex items-center justify-between text-xs shadow-md"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="w-5 text-[11px] text-slate-500 font-mono font-bold shrink-0">
+                      #{idx + 1}
+                    </span>
+                    <div className="truncate">
+                      <div className="font-bold text-white text-sm flex items-center gap-2 truncate">
+                        <span className="truncate">{player.name}</span>
+                        {player.viaRTM && (
+                          <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0">
+                            RTM
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 mt-1">
+                        {getRoleBadge(player.role)}
+                        <span className={`text-[10px] font-medium ${player.isOverseas ? "text-sky-400" : "text-amber-400"}`}>
+                          {player.isOverseas ? "✈️ Overseas" : "🇮🇳 Indian"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="text-right shrink-0">
+                    <div className="font-black text-amber-400 font-mono text-sm">
+                      {player.boughtFor ? `₹${Number(player.boughtFor).toFixed(2)} Cr` : "Retained"}
+                    </div>
+                    <div className="text-[11px] text-slate-400 mt-0.5">
+                      Rating: <b className="text-slate-100 font-mono">{player.rating} ★</b>
+                    </div>
+                  </div>
+                </div>
+              );
+
+              return (
+                <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 shadow-2xl space-y-6">
+                  {/* Franchise Banner */}
+                  <div className="flex items-center justify-between flex-wrap gap-4 pb-6 border-b border-slate-800">
+                    <div className="flex items-center gap-3">
+                      <div className="w-14 h-14 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-center text-3xl shadow-inner">
+                        {currentViewTeam.logoEmoji}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h2 className="text-2xl font-black text-white">{currentViewTeam.name}</h2>
+                          {viewTeamId === myTeamId && (
+                            <span className="px-2 py-0.5 rounded-lg bg-amber-400 text-slate-950 font-black text-[10px]">
+                              YOUR SQUAD
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          Manager: <b className="text-slate-200">{currentTeamState.ownerName || "Franchise Manager"}</b>
+                          {" • "}{currentViewTeam.badgeText}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Quick Metric Badges */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs text-center w-full md:w-auto">
+                      <div className="px-3.5 py-2 bg-slate-950 rounded-xl border border-slate-800">
+                        <div className="text-[10px] uppercase font-bold text-slate-500">Squad Size</div>
+                        <div className="font-mono font-bold text-white text-sm mt-0.5">
+                          {currentSquad.length} / 25
+                        </div>
+                      </div>
+
+                      <div className="px-3.5 py-2 bg-slate-950 rounded-xl border border-slate-800">
+                        <div className="text-[10px] uppercase font-bold text-slate-500">Overseas</div>
+                        <div className={`font-mono font-bold text-sm mt-0.5 ${currentOverseas > 8 ? "text-rose-400" : "text-sky-400"}`}>
+                          {currentOverseas} / 8
+                        </div>
+                      </div>
+
+                      <div className="px-3.5 py-2 bg-slate-950 rounded-xl border border-slate-800">
+                        <div className="text-[10px] uppercase font-bold text-slate-500">Total Spent</div>
+                        <div className="font-mono font-bold text-amber-400 text-sm mt-0.5">
+                          ₹{Number(currentTeamState.spent || 0).toFixed(2)} Cr
+                        </div>
+                      </div>
+
+                      <div className="px-3.5 py-2 bg-slate-950 rounded-xl border border-slate-800">
+                        <div className="text-[10px] uppercase font-bold text-slate-500">Purse Left</div>
+                        <div className="font-mono font-bold text-emerald-400 text-sm mt-0.5">
+                          ₹{Number(currentTeamState.purse || 0).toFixed(2)} Cr
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Department Filter Tabs */}
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-1.5 overflow-x-auto text-xs pb-1">
+                      {[
+                        { id: "ALL", label: `All Players (${currentSquad.length})` },
+                        { id: "BAT", label: `🏏 Batters (${currentBatters.length})` },
+                        { id: "WK", label: `🧤 Wicketkeepers (${currentKeepers.length})` },
+                        { id: "ALL_ROUNDER", label: `⚡ All-Rounders (${currentAllrounders.length})` },
+                        { id: "BOWL", label: `🎯 Bowlers (${currentBowlers.length})` }
+                      ].map((tab) => (
+                        <button
+                          key={tab.id}
+                          onClick={() => setSquadRoleFilter(tab.id)}
+                          className={`px-3 py-1.5 rounded-xl font-bold transition whitespace-nowrap ${
+                            squadRoleFilter === tab.id
+                              ? "bg-amber-400 text-slate-950 shadow-md shadow-amber-400/20"
+                              : "bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800"
+                          }`}
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="text-xs text-slate-400 font-medium">
+                      Showing <b className="text-white">{filteredSquad.length}</b> players
+                    </div>
+                  </div>
+
+                  {/* Squad Display */}
+                  {currentSquad.length === 0 ? (
+                    <div className="py-16 text-center text-slate-500 border border-dashed border-slate-800 rounded-3xl">
+                      No players acquired for {currentViewTeam.name}.
+                    </div>
+                  ) : squadRoleFilter === "ALL" ? (
+                    /* Show Department-by-Department Breakdown */
+                    <div className="space-y-6">
+                      {/* Batters */}
+                      {currentBatters.length > 0 && (
+                        <div className="space-y-2.5">
+                          <h4 className="font-bold text-white text-xs uppercase tracking-wider flex items-center gap-1.5 text-blue-400">
+                            <span>🏏 Batting Department ({currentBatters.length})</span>
+                          </h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                            {currentBatters.map((p, i) => renderPlayerCard(p, i))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Wicketkeepers */}
+                      {currentKeepers.length > 0 && (
+                        <div className="space-y-2.5">
+                          <h4 className="font-bold text-white text-xs uppercase tracking-wider flex items-center gap-1.5 text-amber-400">
+                            <span>🧤 Wicketkeepers ({currentKeepers.length})</span>
+                          </h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                            {currentKeepers.map((p, i) => renderPlayerCard(p, i))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* All-Rounders */}
+                      {currentAllrounders.length > 0 && (
+                        <div className="space-y-2.5">
+                          <h4 className="font-bold text-white text-xs uppercase tracking-wider flex items-center gap-1.5 text-emerald-400">
+                            <span>⚡ All-Rounders ({currentAllrounders.length})</span>
+                          </h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                            {currentAllrounders.map((p, i) => renderPlayerCard(p, i))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Bowlers */}
+                      {currentBowlers.length > 0 && (
+                        <div className="space-y-2.5">
+                          <h4 className="font-bold text-white text-xs uppercase tracking-wider flex items-center gap-1.5 text-rose-400">
+                            <span>🎯 Bowling Department ({currentBowlers.length})</span>
+                          </h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                            {currentBowlers.map((p, i) => renderPlayerCard(p, i))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    /* Filtered List */
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                      {filteredSquad.map((p, i) => renderPlayerCard(p, i))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         ) : (
           /* Playing XI Builder Tab */
