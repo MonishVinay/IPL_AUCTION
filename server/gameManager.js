@@ -65,6 +65,8 @@ class GameManager {
       currentBidder: null, // teamId
       bidHistory: [],
       passedTeams: [], // teamIds that clicked "Pass" on the current player
+      persistentPassTeams: [], // teamIds that remain passed until unchecked
+      totalBidsByTeam: {}, // teamId -> total bids placed in auction
       timer: null,
       transitionTimeout: null,
       timeLeft: 0,
@@ -579,7 +581,7 @@ class GameManager {
     room.currentBid = 0;
     room.currentBidder = null;
     room.bidHistory = [];
-    room.passedTeams = [];
+    room.passedTeams = [...(room.persistentPassTeams || [])];
     room.timeLeft = room.settings.bidTimerSeconds;
     room.status = "AUCTION";
     room.rtmState = null;
@@ -646,7 +648,18 @@ class GameManager {
 
     room.currentBid = nextBid;
     room.currentBidder = teamId;
-    room.passedTeams = []; // Reset passes when bid is placed
+
+    // Track total bids placed by this team
+    room.totalBidsByTeam = room.totalBidsByTeam || {};
+    room.totalBidsByTeam[teamId] = (room.totalBidsByTeam[teamId] || 0) + 1;
+
+    // Bidding automatically disables persistent auto-pass for this team
+    if (room.persistentPassTeams && room.persistentPassTeams.includes(teamId)) {
+      room.persistentPassTeams = room.persistentPassTeams.filter((t) => t !== teamId);
+    }
+
+    // Reset passes to those who currently have persistent auto-pass active (excluding bidder)
+    room.passedTeams = (room.persistentPassTeams || []).filter((t) => t !== teamId);
 
     room.bidHistory.unshift({
       teamId,
@@ -664,10 +677,91 @@ class GameManager {
       currentBidder: room.currentBidder,
       bidHistory: room.bidHistory,
       timeLeft: room.timeLeft,
-      passedTeams: room.passedTeams
+      passedTeams: room.passedTeams,
+      persistentPassTeams: room.persistentPassTeams || []
     });
 
+    this.checkAutoEndBidding(room);
+
     return { success: true };
+  }
+
+  checkAutoEndBidding(room) {
+    if (!room || room.status !== "AUCTION" || !room.currentPlayer) return false;
+
+    const allActiveTeams = room.players.map((p) => p.teamId).filter(Boolean);
+    if (allActiveTeams.length === 0) return false;
+
+    let shouldEnd = false;
+    let message = "";
+
+    if (room.currentBidder) {
+      const rivalTeams = allActiveTeams.filter((t) => t !== room.currentBidder);
+      if (rivalTeams.length > 0 && rivalTeams.every((t) => (room.passedTeams || []).includes(t))) {
+        shouldEnd = true;
+        message = "All rival managers have passed! Gavel striking...";
+      }
+    } else {
+      if (allActiveTeams.length > 0 && allActiveTeams.every((t) => (room.passedTeams || []).includes(t))) {
+        shouldEnd = true;
+        message = "All managers passed! Player unsold...";
+      }
+    }
+
+    if (shouldEnd) {
+      this.clearRoomTimer(room);
+      this.io.to(room.code).emit("fast_forward", { message });
+      room.transitionTimeout = setTimeout(() => {
+        this.handleGavelStrike(room);
+      }, 1000);
+      return true;
+    }
+
+    return false;
+  }
+
+  togglePersistentPass(socketId, enabled = null, roomCode = null, playerId = null) {
+    const info = this.ensurePlayerInRoom(socketId, roomCode, playerId);
+    if (!info) return { error: "Not in room. Please reload to reconnect." };
+    const room = this.rooms.get(info.roomCode);
+    if (!room) return { error: "Room not found" };
+
+    const player = room.players.find((p) => p.id === info.playerId);
+    if (!player || !player.teamId) return { error: "No team assigned" };
+
+    const teamId = player.teamId;
+    room.persistentPassTeams = room.persistentPassTeams || [];
+
+    const isCurrentlyPersistent = room.persistentPassTeams.includes(teamId);
+    const shouldEnable = enabled !== null ? Boolean(enabled) : !isCurrentlyPersistent;
+
+    if (shouldEnable) {
+      if (!room.persistentPassTeams.includes(teamId)) {
+        room.persistentPassTeams.push(teamId);
+      }
+      if (room.status === "AUCTION" && room.passedTeams && !room.passedTeams.includes(teamId)) {
+        if (room.currentBidder !== teamId) {
+          room.passedTeams.push(teamId);
+        }
+      }
+    } else {
+      room.persistentPassTeams = room.persistentPassTeams.filter((t) => t !== teamId);
+      if (room.passedTeams) {
+        room.passedTeams = room.passedTeams.filter((t) => t !== teamId);
+      }
+    }
+
+    this.io.to(room.code).emit("persistent_pass_updated", {
+      teamId,
+      persistentPassTeams: room.persistentPassTeams,
+      passedTeams: room.passedTeams || []
+    });
+
+    if (shouldEnable) {
+      this.checkAutoEndBidding(room);
+    }
+
+    return { success: true, enabled: shouldEnable };
   }
 
   passTurn(socketId, roomCode = null, playerId = null) {
@@ -689,25 +783,7 @@ class GameManager {
       passedTeams: room.passedTeams
     });
 
-    const allActiveTeams = room.players.map((p) => p.teamId).filter(Boolean);
-
-    let shouldFastForward = false;
-    if (room.currentBidder) {
-      const rivalTeams = allActiveTeams.filter((t) => t !== room.currentBidder);
-      shouldFastForward = rivalTeams.length > 0 && rivalTeams.every((t) => room.passedTeams.includes(t));
-    } else {
-      shouldFastForward = allActiveTeams.length > 0 && allActiveTeams.every((t) => room.passedTeams.includes(t));
-    }
-
-    if (shouldFastForward) {
-      this.clearRoomTimer(room);
-      this.io.to(room.code).emit("fast_forward", {
-        message: room.currentBidder ? "All rival managers have passed! Gavel striking..." : "All managers passed! Player unsold..."
-      });
-      room.transitionTimeout = setTimeout(() => {
-        this.handleGavelStrike(room);
-      }, 1000);
-    }
+    this.checkAutoEndBidding(room);
 
     return { success: true };
   }
@@ -721,6 +797,7 @@ class GameManager {
       currentBidder: room.currentBidder,
       bidHistory: room.bidHistory,
       passedTeams: room.passedTeams,
+      persistentPassTeams: room.persistentPassTeams || [],
       timeLeft: room.timeLeft,
       currentPool: room.currentPool,
       currentPoolIndex: room.currentPoolIndex,
@@ -728,6 +805,10 @@ class GameManager {
       poolPlayerCount: room.currentPool.players.length,
       totalPools: room.pools.length
     });
+
+    if (this.checkAutoEndBidding(room)) {
+      return;
+    }
 
     room.timer = setInterval(() => {
       room.timeLeft -= 1;
@@ -978,10 +1059,77 @@ class GameManager {
       ratings[tId] = this.evaluateSquad(tState.squad);
     });
 
+    // Compute simple auction stats
+    const allSquadsWithTeam = [];
+    Object.entries(room.teamsState).forEach(([teamId, state]) => {
+      (state.squad || []).forEach((player) => {
+        allSquadsWithTeam.push({ ...player, teamId });
+      });
+    });
+
+    let mostExpensivePlayer = null;
+    allSquadsWithTeam.forEach((p) => {
+      const price = Number(p.boughtFor || 0);
+      if (!mostExpensivePlayer || price > Number(mostExpensivePlayer.boughtFor || 0)) {
+        mostExpensivePlayer = p;
+      }
+    });
+
+    let maxBids = 0;
+    let teamWithMostBids = null;
+    Object.entries(room.totalBidsByTeam || {}).forEach(([teamId, count]) => {
+      if (count > maxBids) {
+        maxBids = count;
+        teamWithMostBids = teamId;
+      }
+    });
+
+    let maxSpent = 0;
+    let biggestSpender = null;
+    let totalAuctionSpend = 0;
+    Object.entries(room.teamsState).forEach(([teamId, state]) => {
+      totalAuctionSpend += (state.spent || 0);
+      if (state.spent > maxSpent) {
+        maxSpent = state.spent;
+        biggestSpender = teamId;
+      }
+    });
+
+    const auctionStats = {
+      mostExpensivePlayer: mostExpensivePlayer
+        ? {
+            name: mostExpensivePlayer.name,
+            price: mostExpensivePlayer.boughtFor,
+            teamId: mostExpensivePlayer.teamId,
+            role: mostExpensivePlayer.role,
+            image: mostExpensivePlayer.image
+          }
+        : null,
+      teamWithMostBids: teamWithMostBids
+        ? {
+            teamId: teamWithMostBids,
+            count: maxBids
+          }
+        : null,
+      biggestSpender: biggestSpender
+        ? {
+            teamId: biggestSpender,
+            spent: +maxSpent.toFixed(2)
+          }
+        : null,
+      totalSpend: +totalAuctionSpend.toFixed(2),
+      soldCount: room.soldCount,
+      unsoldCount: room.unsoldPool.length
+    };
+
+    room.auctionStats = auctionStats;
+
     this.io.to(room.code).emit("auction_completed", {
       teamsState: room.teamsState,
       unsoldPool: room.unsoldPool,
-      ratings
+      ratings,
+      auctionStats,
+      totalBidsByTeam: room.totalBidsByTeam
     });
   }
 
@@ -1106,6 +1254,9 @@ class GameManager {
       currentBidder: room.currentBidder,
       bidHistory: room.bidHistory,
       passedTeams: room.passedTeams || [],
+      persistentPassTeams: room.persistentPassTeams || [],
+      totalBidsByTeam: room.totalBidsByTeam || {},
+      auctionStats: room.auctionStats || null,
       timeLeft: room.timeLeft,
       totalPlayers: totalPlayersCount,
       rtmState: room.rtmState,

@@ -137,13 +137,8 @@ export default function RetentionPhase({
 
           {onLeaveRoom && (
             <button
-              onClick={() => {
-                try {
-                  localStorage.removeItem("ipl_auction_session");
-                } catch (e) {}
-                onLeaveRoom();
-              }}
-              title="Leave Room"
+              onClick={onLeaveRoom}
+              title="Exit Room"
               className="px-3.5 py-3 rounded-2xl bg-slate-900 hover:bg-red-950/40 border border-slate-800 hover:border-red-800/50 text-slate-400 hover:text-red-300 font-semibold text-xs transition flex items-center gap-1.5"
             >
               <LogOut className="w-4 h-4" />

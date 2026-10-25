@@ -240,12 +240,7 @@ export default function Lobby({
 
           {onLeaveRoom && (
             <button
-              onClick={() => {
-                try {
-                  localStorage.removeItem("ipl_auction_session");
-                } catch (e) {}
-                onLeaveRoom();
-              }}
+              onClick={onLeaveRoom}
               title="Leave Room"
               className="flex items-center gap-1.5 px-3 py-2.5 bg-red-950/40 hover:bg-red-900/60 border border-red-800/50 rounded-xl text-sm font-semibold text-red-300 transition"
             >

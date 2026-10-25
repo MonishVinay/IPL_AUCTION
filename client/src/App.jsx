@@ -119,6 +119,7 @@ export default function App() {
           currentPoolIndex: data.currentPoolIndex,
           currentPoolPlayerIndex: data.currentPoolPlayerIndex,
           totalPools: data.totalPools,
+          persistentPassTeams: data.persistentPassTeams || prev.persistentPassTeams || [],
           status: "AUCTION",
           rtmState: null,
           lastSale: null
@@ -138,7 +139,8 @@ export default function App() {
           currentBidder: data.currentBidder,
           bidHistory: data.bidHistory,
           timeLeft: data.timeLeft,
-          passedTeams: data.passedTeams || []
+          passedTeams: data.passedTeams || [],
+          persistentPassTeams: data.persistentPassTeams || prev.persistentPassTeams || []
         };
       });
       sounds.playBid();
@@ -153,8 +155,26 @@ export default function App() {
       });
     });
 
-    // 4c. All Teams Passed Fast Forward
+    // 4c. Persistent Pass Updated
+    socket.on("persistent_pass_updated", ({ persistentPassTeams, passedTeams }) => {
+      if (!localStorage.getItem(SESSION_KEY)) return;
+      setRoom((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          persistentPassTeams: persistentPassTeams || [],
+          passedTeams: passedTeams || []
+        };
+      });
+    });
+
+    // 4d. All Teams Passed Fast Forward
     socket.on("all_teams_passed", () => {
+      if (!localStorage.getItem(SESSION_KEY)) return;
+      sounds.playGavel();
+    });
+
+    socket.on("fast_forward", () => {
       if (!localStorage.getItem(SESSION_KEY)) return;
       sounds.playGavel();
     });
@@ -292,7 +312,9 @@ export default function App() {
         return {
           ...prev,
           status: "POST_AUCTION",
-          teamsState: data.teamsState
+          teamsState: data.teamsState,
+          auctionStats: data.auctionStats || prev.auctionStats,
+          totalBidsByTeam: data.totalBidsByTeam || prev.totalBidsByTeam
         };
       });
       sounds.playSold();
@@ -308,7 +330,9 @@ export default function App() {
       socket.off("player_presented");
       socket.off("bid_updated");
       socket.off("team_passed");
+      socket.off("persistent_pass_updated");
       socket.off("all_teams_passed");
+      socket.off("fast_forward");
       socket.off("timer_tick");
       socket.off("player_sold");
       socket.off("player_unsold");
@@ -359,6 +383,9 @@ export default function App() {
   };
 
   const handleLeaveRoom = () => {
+    if (!window.confirm("Do you want to exit the room?")) {
+      return;
+    }
     try {
       localStorage.removeItem(SESSION_KEY);
       localStorage.removeItem("ipl_auction_session");
@@ -414,6 +441,10 @@ export default function App() {
 
   const handlePassTurn = () => {
     socket.emit("pass_turn", { roomCode: room?.code, playerId });
+  };
+
+  const handleTogglePersistentPass = (enabled) => {
+    socket.emit("toggle_persistent_pass", { enabled, roomCode: room?.code, playerId });
   };
 
   const handleSkipPlayer = () => {
@@ -525,6 +556,7 @@ export default function App() {
           playerId={playerId}
           onPlaceBid={handlePlaceBid}
           onPassTurn={handlePassTurn}
+          onTogglePersistentPass={handleTogglePersistentPass}
           onSkipPlayer={handleSkipPlayer}
           onSkipPool={handleSkipPool}
           onEndBid={handleEndBid}

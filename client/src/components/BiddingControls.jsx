@@ -8,10 +8,12 @@ export default function BiddingControls({
   myTeamId,
   myTeamState,
   passedTeams = [],
+  persistentPassTeams = [],
   settings,
   isHost,
   onPlaceBid,
   onPassTurn,
+  onTogglePersistentPass,
   onSkipPlayer,
   onSkipPool,
   onEndBid
@@ -23,6 +25,7 @@ export default function BiddingControls({
 
   const isLeading = currentBidder === myTeamId;
   const hasPassed = passedTeams.includes(myTeamId);
+  const isAutoPassActive = persistentPassTeams.includes(myTeamId);
   const purse = myTeamState?.purse || 0;
   const squad = myTeamState?.squad || [];
   const overseasCount = squad.filter((p) => p.isOverseas).length;
@@ -168,7 +171,7 @@ export default function BiddingControls({
         <button
           onClick={onPassTurn}
           disabled={isLeading || hasPassed}
-          title={hasPassed ? "You have already passed on this player" : "Pass your turn. If all rivals pass, bidding ends immediately."}
+          title={hasPassed ? "You have already passed on this player" : "Pass on this player"}
           className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
             hasPassed
               ? "bg-slate-800 text-slate-500 cursor-default border border-slate-800"
@@ -178,6 +181,33 @@ export default function BiddingControls({
           <X className="w-3.5 h-3.5 text-rose-400" />
           <span>{hasPassed ? "Passed ✕" : "Pass"}</span>
         </button>
+
+        {/* Persistent Auto-Pass Button */}
+        {onTogglePersistentPass && (
+          <button
+            type="button"
+            onClick={() => onTogglePersistentPass(!isAutoPassActive)}
+            title={
+              isAutoPassActive
+                ? "Auto-Pass is ACTIVE: You remain passed until unchecked or you bid. Click to disable."
+                : "Enable Auto-Pass: Remain passed across upcoming players until you uncheck it."
+            }
+            className={`px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+              isAutoPassActive
+                ? "bg-amber-500/20 text-amber-300 border border-amber-500/50 shadow-sm shadow-amber-500/20"
+                : "bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <span
+              className={`w-3.5 h-3.5 rounded flex items-center justify-center text-[10px] font-bold border transition ${
+                isAutoPassActive ? "bg-amber-400 text-slate-950 border-amber-400" : "border-slate-600 bg-slate-900 text-transparent"
+              }`}
+            >
+              ✓
+            </span>
+            <span>{isAutoPassActive ? "Auto-Pass: ON" : "Auto-Pass"}</span>
+          </button>
+        )}
 
         {isHost && (
           <div className="flex items-center gap-1.5 flex-wrap">
@@ -220,7 +250,7 @@ export default function BiddingControls({
       </div>
 
       <div className="text-[10px] text-slate-500 text-center">
-        Tip: If all managers click <b className="text-slate-400">Pass</b>, the player is sold or marked unsold immediately without waiting for the timer!
+        Tip: Toggle <b className="text-slate-400">Auto-Pass</b> to remain passed across upcoming players until you uncheck it or place a bid.
       </div>
     </div>
   );

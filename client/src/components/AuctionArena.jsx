@@ -9,6 +9,7 @@ export default function AuctionArena({
   playerId,
   onPlaceBid,
   onPassTurn,
+  onTogglePersistentPass,
   onSkipPlayer,
   onSkipPool,
   onEndBid,
@@ -122,13 +123,8 @@ export default function AuctionArena({
 
           {onLeaveRoom && (
             <button
-              onClick={() => {
-                try {
-                  localStorage.removeItem("ipl_auction_session");
-                } catch (e) {}
-                onLeaveRoom();
-              }}
-              title="Leave Room"
+              onClick={onLeaveRoom}
+              title="Exit Room"
               className="p-2 bg-slate-900 hover:bg-red-950/40 border border-slate-800 hover:border-red-800/50 rounded-xl text-slate-400 hover:text-red-300 transition"
             >
               <LogOut className="w-4 h-4" />
@@ -262,6 +258,9 @@ export default function AuctionArena({
                         className="px-2 py-0.5 rounded-md bg-rose-500/15 border border-rose-500/30 text-rose-300 font-bold flex items-center gap-1"
                       >
                         <span>{getTeam(tId).shortName}</span>
+                        {room.persistentPassTeams?.includes(tId) && (
+                          <span className="text-[9px] px-1 rounded bg-amber-500/20 text-amber-300 font-normal">Auto</span>
+                        )}
                         <span>✕</span>
                       </span>
                     ))
@@ -339,10 +338,12 @@ export default function AuctionArena({
             myTeamId={myTeamId}
             myTeamState={myTeamState}
             passedTeams={room.passedTeams || []}
+            persistentPassTeams={room.persistentPassTeams || []}
             settings={room.settings}
             isHost={myPlayer?.isHost}
             onPlaceBid={onPlaceBid}
             onPassTurn={onPassTurn}
+            onTogglePersistentPass={onTogglePersistentPass}
             onSkipPlayer={onSkipPlayer}
             onSkipPool={onSkipPool}
             onEndBid={onEndBid}

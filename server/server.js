@@ -209,6 +209,16 @@ io.on("connection", (socket) => {
     }
   });
 
+  // 9b. Persistent Auto-Pass Toggle
+  socket.on("toggle_persistent_pass", ({ enabled, roomCode, playerId } = {}, callback) => {
+    try {
+      const result = gameManager.togglePersistentPass(socket.id, enabled, roomCode, playerId);
+      if (typeof callback === "function") callback(result);
+    } catch (err) {
+      if (typeof callback === "function") callback({ error: err.message });
+    }
+  });
+
   // 10. Respond to RTM challenge
   socket.on("respond_rtm", ({ exerciseRTM, roomCode, playerId }, callback) => {
     try {
