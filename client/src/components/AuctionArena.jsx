@@ -341,6 +341,7 @@ export default function AuctionArena({
             persistentPassTeams={room.persistentPassTeams || []}
             settings={room.settings}
             isHost={myPlayer?.isHost}
+            isResolved={Boolean(room.lastSale || room.isResolvingSale)}
             onPlaceBid={onPlaceBid}
             onPassTurn={onPassTurn}
             onTogglePersistentPass={onTogglePersistentPass}

@@ -70,6 +70,7 @@ class GameManager {
       timer: null,
       transitionTimeout: null,
       timeLeft: 0,
+      isResolvingSale: false,
       rtmState: null, // active RTM request
       lastSale: null, // { player, buyerTeamId, amount, viaRTM }
       unsoldPool: [],
@@ -564,8 +565,9 @@ class GameManager {
 
   presentNextPlayerInPool(room) {
     this.clearRoomTimer(room);
-    room.currentPoolPlayerIndex += 1;
+    room.isResolvingSale = false;
     room.lastSale = null;
+    room.currentPoolPlayerIndex += 1;
 
     if (room.currentPoolPlayerIndex >= room.currentPool.players.length) {
       if (room.currentPoolIndex + 1 < room.pools.length) {
@@ -577,6 +579,17 @@ class GameManager {
     }
 
     const player = room.currentPool.players[room.currentPoolPlayerIndex];
+
+    // Check if player is already acquired in ANY franchise squad (retained or sold)
+    const allAcquiredPlayerIds = new Set(
+      Object.values(room.teamsState).flatMap((t) => (t.squad || []).map((p) => p.id))
+    );
+    if (allAcquiredPlayerIds.has(player.id)) {
+      console.warn(`[GameManager] Skipping already acquired player from pool: ${player.name} (${player.id})`);
+      this.presentNextPlayerInPool(room);
+      return;
+    }
+
     room.currentPlayer = player;
     room.currentBid = 0;
     room.currentBidder = null;
@@ -602,7 +615,7 @@ class GameManager {
     if (!info) return { error: "Not in room. Please reload to reconnect." };
 
     const room = this.rooms.get(info.roomCode);
-    if (!room || room.status !== "AUCTION" || !room.currentPlayer) {
+    if (!room || room.status !== "AUCTION" || !room.currentPlayer || room.isResolvingSale || room.lastSale) {
       return { error: "Auction is not open for bidding right now." };
     }
 
@@ -687,7 +700,9 @@ class GameManager {
   }
 
   checkAutoEndBidding(room) {
-    if (!room || room.status !== "AUCTION" || !room.currentPlayer) return false;
+    if (!room || room.status !== "AUCTION" || !room.currentPlayer || room.isResolvingSale || room.lastSale) {
+      return false;
+    }
 
     const allActiveTeams = room.players.map((p) => p.teamId).filter(Boolean);
     if (allActiveTeams.length === 0) return false;
@@ -710,6 +725,7 @@ class GameManager {
 
     if (shouldEnd) {
       this.clearRoomTimer(room);
+      room.isResolvingSale = true;
       this.io.to(room.code).emit("fast_forward", { message });
       room.transitionTimeout = setTimeout(() => {
         this.handleGavelStrike(room);
@@ -757,7 +773,7 @@ class GameManager {
       passedTeams: room.passedTeams || []
     });
 
-    if (shouldEnable) {
+    if (shouldEnable && !room.isResolvingSale && !room.lastSale) {
       this.checkAutoEndBidding(room);
     }
 
@@ -768,7 +784,9 @@ class GameManager {
     const info = this.ensurePlayerInRoom(socketId, roomCode, playerId);
     if (!info) return { error: "Not in room. Please reload to reconnect." };
     const room = this.rooms.get(info.roomCode);
-    if (!room || room.status !== "AUCTION") return { error: "Not in auction" };
+    if (!room || room.status !== "AUCTION" || !room.currentPlayer || room.isResolvingSale || room.lastSale) {
+      return { error: "Not in auction" };
+    }
 
     const player = room.players.find((p) => p.id === info.playerId);
     if (!player || !player.teamId) return { error: "No team assigned" };
@@ -824,15 +842,27 @@ class GameManager {
   handleGavelStrike(room) {
     this.clearRoomTimer(room);
 
+    // Guard against multiple executions on the same player
+    if (!room.currentPlayer || room.lastSale) {
+      return;
+    }
+
+    room.isResolvingSale = true;
+
     if (room.currentBid === 0 || !room.currentBidder) {
-      room.unsoldPool.push(room.currentPlayer);
+      const unsoldPlayer = room.currentPlayer;
+
+      if (!room.unsoldPool.some((p) => p.id === unsoldPlayer.id)) {
+        room.unsoldPool.push(unsoldPlayer);
+      }
+
       room.lastSale = {
-        player: room.currentPlayer,
+        player: unsoldPlayer,
         unsold: true
       };
 
       this.io.to(room.code).emit("player_unsold", {
-        player: room.currentPlayer
+        player: unsoldPlayer
       });
 
       room.transitionTimeout = setTimeout(() => {
@@ -861,6 +891,7 @@ class GameManager {
 
   initiateRTM(room, origTeamId, winningTeamId) {
     this.clearRoomTimer(room);
+    room.isResolvingSale = false;
     room.status = "RTM_CHALLENGE";
     room.rtmState = {
       player: room.currentPlayer,
@@ -884,6 +915,7 @@ class GameManager {
 
       if (room.rtmState.timeLeft <= 0) {
         this.clearRoomTimer(room);
+        if (!room.rtmState) return;
         const rtmChallenge = { ...room.rtmState };
         room.status = "AUCTION";
         room.rtmState = null;
@@ -902,7 +934,7 @@ class GameManager {
     const info = this.ensurePlayerInRoom(socketId, roomCode, playerId);
     if (!info) return { error: "Not in room. Please reload to reconnect." };
     const room = this.rooms.get(info.roomCode);
-    if (!room || room.status !== "RTM_CHALLENGE" || !room.rtmState) {
+    if (!room || room.status !== "RTM_CHALLENGE" || !room.rtmState || room.isResolvingSale) {
       return { error: "No active RTM challenge." };
     }
 
@@ -912,6 +944,7 @@ class GameManager {
     }
 
     this.clearRoomTimer(room);
+    room.isResolvingSale = true;
 
     // Snapshot RTM details and immediately reset room state to prevent re-triggering or stale modal
     const rtmChallenge = { ...room.rtmState };
@@ -945,24 +978,45 @@ class GameManager {
 
   finalizeSale(room, buyerTeamId, amount, viaRTM = false) {
     this.clearRoomTimer(room);
+
+    if (!room.currentPlayer) return;
+    const soldPlayer = room.currentPlayer;
+    room.isResolvingSale = true;
+
+    // Strict safety check: has this player already been acquired in ANY squad?
+    const allSquads = Object.values(room.teamsState).flatMap((t) => t.squad || []);
+    const alreadyAcquired = allSquads.some((p) => p.id === soldPlayer.id);
+
+    if (alreadyAcquired) {
+      console.warn(`[GameManager] Blocked duplicate sale of player: ${soldPlayer.name} (${soldPlayer.id})`);
+      room.transitionTimeout = setTimeout(() => {
+        this.presentNextPlayerInPool(room);
+      }, 1500);
+      return;
+    }
+
     room.status = "AUCTION";
     room.rtmState = null;
 
     const buyer = room.teamsState[buyerTeamId];
     if (buyer) {
-      buyer.purse = +(buyer.purse - amount).toFixed(2);
-      buyer.spent = +(buyer.spent + amount).toFixed(2);
-      buyer.squad.push({
-        ...room.currentPlayer,
-        boughtFor: amount,
-        viaRTM
-      });
+      // Double check buyer does not already have this player before deducting
+      const alreadyInBuyer = (buyer.squad || []).some((p) => p.id === soldPlayer.id);
+      if (!alreadyInBuyer) {
+        buyer.purse = +(buyer.purse - amount).toFixed(2);
+        buyer.spent = +(buyer.spent + amount).toFixed(2);
+        buyer.squad.push({
+          ...soldPlayer,
+          boughtFor: amount,
+          viaRTM
+        });
+      }
     }
 
     room.soldCount += 1;
 
     const saleInfo = {
-      player: room.currentPlayer,
+      player: soldPlayer,
       buyerTeamId,
       amount,
       viaRTM
@@ -983,14 +1037,26 @@ class GameManager {
     const info = this.ensurePlayerInRoom(socketId, roomCode, playerId);
     if (!info) return { error: "Not in room" };
     const room = this.rooms.get(info.roomCode);
-    if (!room || room.status !== "AUCTION") return { error: "Not in auction" };
+    if (!room || room.status !== "AUCTION" || !room.currentPlayer || room.isResolvingSale || room.lastSale) {
+      return { error: "Not in auction" };
+    }
 
     const player = room.players.find((p) => p.id === info.playerId);
     if (!player || !player.isHost) return { error: "Only the host can skip a player." };
 
     this.clearRoomTimer(room);
-    room.unsoldPool.push(room.currentPlayer);
-    this.io.to(room.code).emit("player_unsold", { player: room.currentPlayer, skipped: true });
+    room.isResolvingSale = true;
+    const skippedPlayer = room.currentPlayer;
+
+    if (!room.unsoldPool.some((p) => p.id === skippedPlayer.id)) {
+      room.unsoldPool.push(skippedPlayer);
+    }
+    room.lastSale = {
+      player: skippedPlayer,
+      unsold: true
+    };
+
+    this.io.to(room.code).emit("player_unsold", { player: skippedPlayer, skipped: true });
 
     room.transitionTimeout = setTimeout(() => {
       this.presentNextPlayerInPool(room);
@@ -1003,7 +1069,7 @@ class GameManager {
     const info = this.ensurePlayerInRoom(socketId, roomCode, playerId);
     if (!info) return { error: "Not in room" };
     const room = this.rooms.get(info.roomCode);
-    if (!room || room.status !== "AUCTION" || !room.currentPlayer) {
+    if (!room || room.status !== "AUCTION" || !room.currentPlayer || room.isResolvingSale || room.lastSale) {
       return { error: "No active bidding round right now." };
     }
 
@@ -1026,7 +1092,13 @@ class GameManager {
     const player = room.players.find((p) => p.id === info.playerId);
     if (!player || !player.isHost) return { error: "Only the host can trigger re-auction." };
 
-    if (room.unsoldPool.length === 0) {
+    // Safety: filter out any players that were already acquired in any squad
+    const allAcquiredPlayerIds = new Set(
+      Object.values(room.teamsState).flatMap((t) => (t.squad || []).map((p) => p.id))
+    );
+    const validUnsold = room.unsoldPool.filter((p) => !allAcquiredPlayerIds.has(p.id));
+
+    if (validUnsold.length === 0) {
       return { error: "No unsold players available for re-auction." };
     }
 
@@ -1035,7 +1107,7 @@ class GameManager {
       code: "ACCEL",
       name: "Accelerated Round: Unsold Players",
       description: "Fast-track re-auction of previously unsold players",
-      players: [...room.unsoldPool.sort(() => Math.random() - 0.5)]
+      players: [...validUnsold.sort(() => Math.random() - 0.5)]
     };
 
     room.pools.push(accelPool);
@@ -1261,6 +1333,7 @@ class GameManager {
       totalPlayers: totalPlayersCount,
       rtmState: room.rtmState,
       lastSale: room.lastSale,
+      isResolvingSale: Boolean(room.isResolvingSale),
       unsoldPoolCount: room.unsoldPool.length,
       soldCount: room.soldCount
     };
