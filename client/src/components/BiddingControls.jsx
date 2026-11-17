@@ -23,7 +23,6 @@ export default function BiddingControls({
   onSkipPool,
   onEndBid
 }) {
-  const [customInput, setCustomInput] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [showAutoSkipModal, setShowAutoSkipModal] = useState(false);
 
@@ -94,26 +93,6 @@ export default function BiddingControls({
     });
   };
 
-  const handleCustomBid = (e) => {
-    e.preventDefault();
-    if (isResolved) return;
-    setErrorMsg("");
-    const amount = Number(customInput);
-    if (!amount || amount <= currentBid) {
-      setErrorMsg("Custom bid must be strictly higher than the current bid.");
-      return;
-    }
-    const err = validateBid(amount);
-    if (err) {
-      setErrorMsg(err);
-      return;
-    }
-    onPlaceBid(amount, (res) => {
-      if (res?.error) setErrorMsg(res.error);
-      else setCustomInput("");
-    });
-  };
-
   return (
     <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-5 space-y-4 shadow-xl backdrop-blur-md">
       {/* Error / Warning Alert */}
@@ -180,70 +159,52 @@ export default function BiddingControls({
         ))}
       </div>
 
-      {/* Custom Bid Input & Interactive Pass Button */}
-      <div className="flex items-center gap-2 pt-1 border-t border-slate-800/80">
-        <form onSubmit={handleCustomBid} className="flex-1 flex gap-2">
-          <input
-            type="number"
-            step="0.05"
-            min={currentBid + 0.05}
-            placeholder={`Custom bid (> ₹${currentBid || currentPlayer.basePrice} Cr)...`}
-            value={customInput}
-            onChange={(e) => setCustomInput(e.target.value)}
-            disabled={isLeading || isResolved}
-            className="flex-1 px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 disabled:opacity-50"
-          />
+      {/* Interactive Pass & Host Controls */}
+      <div className="flex items-center justify-between flex-wrap gap-2 pt-2 border-t border-slate-800/80">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Pass Button with state */}
           <button
-            type="submit"
-            disabled={isLeading || !customInput || isResolved}
-            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-xs font-bold text-white rounded-xl transition"
+            onClick={onPassTurn}
+            disabled={isLeading || hasPassed || isResolved}
+            title={hasPassed ? "You have already passed on this player" : "Pass on this player"}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+              isResolved || hasPassed
+                ? "bg-slate-800 text-slate-500 cursor-default border border-slate-800 opacity-60"
+                : "bg-slate-950 hover:bg-rose-500/10 border border-slate-800 hover:border-rose-500/30 text-slate-300 hover:text-rose-400"
+            }`}
           >
-            Raise
+            <X className="w-3.5 h-3.5 text-rose-400" />
+            <span>{hasPassed ? "Passed ✕" : "Pass"}</span>
           </button>
-        </form>
 
-        {/* Pass Button with state */}
-        <button
-          onClick={onPassTurn}
-          disabled={isLeading || hasPassed || isResolved}
-          title={hasPassed ? "You have already passed on this player" : "Pass on this player"}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
-            isResolved || hasPassed
-              ? "bg-slate-800 text-slate-500 cursor-default border border-slate-800 opacity-60"
-              : "bg-slate-950 hover:bg-rose-500/10 border border-slate-800 hover:border-rose-500/30 text-slate-300 hover:text-rose-400"
-          }`}
-        >
-          <X className="w-3.5 h-3.5 text-rose-400" />
-          <span>{hasPassed ? "Passed ✕" : "Pass"}</span>
-        </button>
-
-        {/* Persistent Auto-Pass Button */}
-        {onTogglePersistentPass && (
-          <button
-            type="button"
-            onClick={() => onTogglePersistentPass(!isAutoPassActive)}
-            disabled={isResolved}
-            title={
-              isAutoPassActive
-                ? "Auto-Pass is ACTIVE: You remain passed until unchecked or you bid. Click to disable."
-                : "Enable Auto-Pass: Remain passed across upcoming players until you uncheck it."
-            }
-            className={`px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
-              isAutoPassActive
-                ? "bg-amber-500/20 text-amber-300 border border-amber-500/50 shadow-sm shadow-amber-500/20"
-                : "bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-slate-200"
-            } disabled:opacity-50`}
-          >
-            <span
-              className={`w-3.5 h-3.5 rounded flex items-center justify-center text-[10px] font-bold border transition ${
-                isAutoPassActive ? "bg-amber-400 text-slate-950 border-amber-400" : "border-slate-600 bg-slate-900 text-transparent"
-              }`}
+          {/* Persistent Auto-Pass Button */}
+          {onTogglePersistentPass && (
+            <button
+              type="button"
+              onClick={() => onTogglePersistentPass(!isAutoPassActive)}
+              disabled={isResolved}
+              title={
+                isAutoPassActive
+                  ? "Auto-Pass is ACTIVE: You remain passed until unchecked or you bid. Click to disable."
+                  : "Enable Auto-Pass: Remain passed across upcoming players until you uncheck it."
+              }
+              className={`px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+                isAutoPassActive
+                  ? "bg-amber-500/20 text-amber-300 border border-amber-500/50 shadow-sm shadow-amber-500/20"
+                  : "bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-slate-200"
+              } disabled:opacity-50`}
             >
-              ✓
-            </span>
-            <span>{isAutoPassActive ? "Auto-Pass: ON" : "Auto-Pass"}</span>
-          </button>
-        )}
+              <span
+                className={`w-3.5 h-3.5 rounded flex items-center justify-center text-[10px] font-bold border transition ${
+                  isAutoPassActive ? "bg-amber-400 text-slate-950 border-amber-400" : "border-slate-600 bg-slate-900 text-transparent"
+                }`}
+              >
+                ✓
+              </span>
+              <span>{isAutoPassActive ? "Auto-Pass: ON" : "Auto-Pass"}</span>
+            </button>
+          )}
+        </div>
 
         {isHost && (
           <div className="flex items-center gap-1.5 flex-wrap">
