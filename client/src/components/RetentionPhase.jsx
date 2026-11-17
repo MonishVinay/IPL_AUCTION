@@ -10,6 +10,7 @@ export default function RetentionPhase({
   playerId,
   onToggleRetention,
   onLockRetentions,
+  onSetPlayerAutoSkip,
   onLeaveRoom
 }) {
   const [roleFilter, setRoleFilter] = useState("ALL_ROLES");
@@ -408,9 +409,21 @@ export default function RetentionPhase({
                           <span>Locked ({tState.retained.length})</span>
                         </span>
                       ) : (
-                        <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                          Choosing ({tState.retained.length})...
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                            Choosing ({tState.retained.length})...
+                          </span>
+                          {currentPlayer?.isHost && p.id !== playerId && onSetPlayerAutoSkip && (
+                            <button
+                              type="button"
+                              onClick={() => onSetPlayerAutoSkip(p.teamId, true)}
+                              title="Auto-skip / lock retentions for this offline or AFK manager"
+                              className="px-2 py-0.5 bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 text-rose-300 rounded text-[10px] font-bold transition flex items-center gap-1"
+                            >
+                              <span>Auto-Skip</span>
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
                   </div>

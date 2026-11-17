@@ -210,9 +210,19 @@ io.on("connection", (socket) => {
   });
 
   // 9b. Persistent Auto-Pass Toggle
-  socket.on("toggle_persistent_pass", ({ enabled, roomCode, playerId } = {}, callback) => {
+  socket.on("toggle_persistent_pass", ({ enabled, roomCode, playerId, targetTeamId } = {}, callback) => {
     try {
-      const result = gameManager.togglePersistentPass(socket.id, enabled, roomCode, playerId);
+      const result = gameManager.togglePersistentPass(socket.id, enabled, roomCode, playerId, targetTeamId);
+      if (typeof callback === "function") callback(result);
+    } catch (err) {
+      if (typeof callback === "function") callback({ error: err.message });
+    }
+  });
+
+  // 9c. Host Set Player Auto-Skip (AFK / Offline)
+  socket.on("set_player_auto_skip", ({ targetTeamId, enabled, roomCode, playerId } = {}, callback) => {
+    try {
+      const result = gameManager.setPlayerAutoSkip(socket.id, targetTeamId, enabled, roomCode, playerId);
       if (typeof callback === "function") callback(result);
     } catch (err) {
       if (typeof callback === "function") callback({ error: err.message });

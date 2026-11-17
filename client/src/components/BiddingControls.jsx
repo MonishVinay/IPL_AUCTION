@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { Gavel, FastForward, SkipForward, AlertCircle, Plus, Check, X, ShieldAlert } from "lucide-react";
+import { Gavel, FastForward, SkipForward, AlertCircle, Plus, Check, X, ShieldAlert, UserX } from "lucide-react";
+import { getTeam } from "../teamsData";
 
 export default function BiddingControls({
   currentBid,
@@ -12,15 +13,19 @@ export default function BiddingControls({
   settings,
   isHost,
   isResolved = false,
+  players = [],
+  teamsState = {},
   onPlaceBid,
   onPassTurn,
   onTogglePersistentPass,
+  onSetPlayerAutoSkip,
   onSkipPlayer,
   onSkipPool,
   onEndBid
 }) {
   const [customInput, setCustomInput] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
+  const [showAutoSkipModal, setShowAutoSkipModal] = useState(false);
 
   if (!currentPlayer) return null;
 
@@ -30,6 +35,25 @@ export default function BiddingControls({
   const purse = myTeamState?.purse || 0;
   const squad = myTeamState?.squad || [];
   const overseasCount = squad.filter((p) => p.isOverseas).length;
+
+  const autoSkippedRivalsCount = persistentPassTeams.filter((t) => t !== myTeamId).length;
+  const rivalList = Object.keys(teamsState)
+    .filter((tId) => tId !== myTeamId)
+    .map((tId) => {
+      const team = getTeam(tId);
+      const player = (players || []).find((p) => p.teamId === tId);
+      const isOnline = player ? player.isConnected !== false : true;
+      const isAutoSkip = persistentPassTeams.includes(tId);
+      const hasPassedThisPlayer = passedTeams.includes(tId);
+      return {
+        teamId: tId,
+        team,
+        player,
+        isOnline,
+        isAutoSkip,
+        hasPassedThisPlayer
+      };
+    });
 
   const getNextIncrement = (curr, base) => {
     if (curr === 0) return base;
@@ -260,6 +284,22 @@ export default function BiddingControls({
                 <span>Skip Pool</span>
               </button>
             )}
+
+            {onSetPlayerAutoSkip && rivalList.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowAutoSkipModal(true)}
+                title="Host: Configure Auto-Skip for offline or AFK managers"
+                className={`px-2.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border ${
+                  autoSkippedRivalsCount > 0
+                    ? "bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border-amber-500/40"
+                    : "bg-slate-950 hover:bg-slate-800 text-slate-300 border-slate-800"
+                }`}
+              >
+                <UserX className="w-3.5 h-3.5 text-amber-400" />
+                <span>Auto-Skip AFK {autoSkippedRivalsCount > 0 ? `(${autoSkippedRivalsCount})` : ""}</span>
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -267,6 +307,88 @@ export default function BiddingControls({
       <div className="text-[10px] text-slate-500 text-center">
         Tip: Toggle <b className="text-slate-400">Auto-Pass</b> to remain passed across upcoming players until you uncheck it or place a bid.
       </div>
+
+      {/* Host AFK / Auto-Skip Manager Modal */}
+      {showAutoSkipModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="relative w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <UserX className="w-5 h-5 text-amber-400" />
+                <h3 className="font-extrabold text-white text-base">Host: Auto-Skip AFK Managers</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAutoSkipModal(false)}
+                className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-400">
+              Enable <b>Auto-Skip</b> for offline or AFK managers. Their turns will pass immediately, so the auction won't wait for countdown timers or RTM.
+            </p>
+
+            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+              {rivalList.length === 0 ? (
+                <div className="text-center py-6 text-xs text-slate-500">
+                  No rival managers in this room.
+                </div>
+              ) : (
+                rivalList.map(({ teamId, team, player, isOnline, isAutoSkip, hasPassedThisPlayer }) => (
+                  <div
+                    key={teamId}
+                    className="flex items-center justify-between p-3 bg-slate-950/70 border border-slate-800 rounded-2xl text-xs"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-xl">{team.logoEmoji}</span>
+                      <div>
+                        <div className="font-bold text-white flex items-center gap-1.5">
+                          <span>{team.shortName}</span>
+                          <span className="text-slate-400 font-normal">({player?.name || "Manager"})</span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className={`inline-flex items-center gap-1 text-[10px] ${isOnline ? "text-emerald-400" : "text-rose-400 font-bold"}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? "bg-emerald-400" : "bg-rose-400"}`} />
+                            {isOnline ? "Online" : "Offline"}
+                          </span>
+                          <span className="text-[10px] text-slate-500">
+                            {hasPassedThisPlayer ? "Passed" : "Active"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => onSetPlayerAutoSkip(teamId, !isAutoSkip)}
+                      className={`px-3 py-1.5 rounded-xl font-bold text-xs transition flex items-center gap-1.5 border ${
+                        isAutoSkip
+                          ? "bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-sm shadow-amber-500/20 hover:bg-amber-500/30"
+                          : "bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700"
+                      }`}
+                    >
+                      <UserX className="w-3.5 h-3.5 text-amber-400" />
+                      <span>{isAutoSkip ? "Auto-Skip: ON" : "Set Auto-Skip"}</span>
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="pt-2 text-right">
+              <button
+                type="button"
+                onClick={() => setShowAutoSkipModal(false)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-xs transition"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

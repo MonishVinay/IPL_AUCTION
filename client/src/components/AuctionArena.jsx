@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { getTeam } from "../teamsData";
 import BiddingControls from "./BiddingControls";
 import SquadDrawer from "./SquadDrawer";
-import { Volume2, VolumeX, Users, Clock, Award, Shield, DollarSign, Sparkles, LogOut } from "lucide-react";
+import { Volume2, VolumeX, Users, Clock, Award, Shield, DollarSign, Sparkles, LogOut, UserX } from "lucide-react";
 
 export default function AuctionArena({
   room,
@@ -10,6 +10,7 @@ export default function AuctionArena({
   onPlaceBid,
   onPassTurn,
   onTogglePersistentPass,
+  onSetPlayerAutoSkip,
   onSkipPlayer,
   onSkipPool,
   onEndBid,
@@ -342,9 +343,12 @@ export default function AuctionArena({
             settings={room.settings}
             isHost={myPlayer?.isHost}
             isResolved={Boolean(room.lastSale || room.isResolvingSale)}
+            players={room.players || []}
+            teamsState={room.teamsState || {}}
             onPlaceBid={onPlaceBid}
             onPassTurn={onPassTurn}
             onTogglePersistentPass={onTogglePersistentPass}
+            onSetPlayerAutoSkip={onSetPlayerAutoSkip}
             onSkipPlayer={onSkipPlayer}
             onSkipPool={onSkipPool}
             onEndBid={onEndBid}
@@ -401,32 +405,87 @@ export default function AuctionArena({
             </div>
           </div>
 
-          {/* Opponent Purse Glance */}
+          {/* Opponent Purse Glance & AFK Auto-Skip */}
           <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-4 space-y-2.5">
-            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-              Franchise Purse Tracker
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                Franchises & Managers
+              </div>
+              {myPlayer?.isHost && (
+                <span className="text-[10px] text-amber-400/90 font-medium">
+                  Host Auto-Skip active
+                </span>
+              )}
             </div>
 
-            <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
               {Object.entries(room.teamsState).map(([tId, tData]) => {
                 const team = getTeam(tId);
                 const isMe = tId === myTeamId;
+                const targetPlayer = (room.players || []).find((p) => p.teamId === tId);
+                const isConnected = targetPlayer ? targetPlayer.isConnected !== false : true;
+                const isAutoSkip = room.persistentPassTeams?.includes(tId);
+
                 return (
                   <div
                     key={tId}
-                    className={`p-2 rounded-xl border flex items-center justify-between ${
+                    className={`p-2.5 rounded-2xl border transition flex flex-col justify-between gap-1.5 ${
                       isMe
                         ? "bg-amber-500/10 border-amber-400/40"
+                        : isAutoSkip
+                        ? "bg-slate-950/80 border-amber-500/30"
                         : "bg-slate-950/60 border-slate-800"
                     }`}
                   >
-                    <div className="flex items-center gap-1.5">
-                      <span>{team.logoEmoji}</span>
-                      <span className="font-bold text-white">{team.shortName}</span>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-base">{team.logoEmoji}</span>
+                        <div>
+                          <div className="font-bold text-white leading-tight flex items-center gap-1">
+                            <span>{team.shortName}</span>
+                            {isMe && <span className="text-[9px] text-amber-400">(You)</span>}
+                          </div>
+                          <div className="text-[10px] text-slate-400 flex items-center gap-1">
+                            <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? "bg-emerald-400" : "bg-rose-400"}`} />
+                            <span className="truncate max-w-[70px]">{targetPlayer?.name || tData.ownerName || "Manager"}</span>
+                            {!isConnected && (
+                              <span className="text-[9px] text-rose-400 font-bold">(Offline)</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="text-right">
+                        <div className="font-mono font-bold text-amber-400 text-xs">
+                          ₹{Number(tData.purse || 0).toFixed(1)} Cr
+                        </div>
+                        {isAutoSkip && (
+                          <span className="text-[9px] font-bold text-amber-300/90 block">
+                            Auto-Skip
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <span className="font-mono font-bold text-amber-400 text-[11px]">
-                      ₹{Number(tData.purse || 0).toFixed(1)} Cr
-                    </span>
+
+                    {/* Host Auto-Skip Action for Rival Managers */}
+                    {myPlayer?.isHost && !isMe && onSetPlayerAutoSkip && (
+                      <div className="pt-1 border-t border-slate-800/80 flex items-center justify-between">
+                        <span className="text-[10px] text-slate-500">Auto-Skip:</span>
+                        <button
+                          type="button"
+                          onClick={() => onSetPlayerAutoSkip(tId, !isAutoSkip)}
+                          title={isAutoSkip ? "Turn OFF auto-skip for this manager" : "Set this manager to auto-skip (for offline or AFK players)"}
+                          className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition flex items-center gap-1 border ${
+                            isAutoSkip
+                              ? "bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border-amber-500/40"
+                              : "bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700"
+                          }`}
+                        >
+                          <UserX className="w-2.5 h-2.5 text-amber-400" />
+                          <span>{isAutoSkip ? "Auto-Skip ON" : "Set Auto-Skip"}</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 );
               })}

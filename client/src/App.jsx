@@ -168,7 +168,30 @@ export default function App() {
       });
     });
 
-    // 4d. All Teams Passed Fast Forward
+    // 4d. Player Disconnection / Reconnection (Live connection status updates)
+    socket.on("player_disconnected", ({ players }) => {
+      if (!localStorage.getItem(SESSION_KEY)) return;
+      setRoom((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          players: players || prev.players
+        };
+      });
+    });
+
+    socket.on("player_reconnected", ({ players }) => {
+      if (!localStorage.getItem(SESSION_KEY)) return;
+      setRoom((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          players: players || prev.players
+        };
+      });
+    });
+
+    // 4e. All Teams Passed Fast Forward
     socket.on("all_teams_passed", () => {
       if (!localStorage.getItem(SESSION_KEY)) return;
       sounds.playGavel();
@@ -331,6 +354,8 @@ export default function App() {
       socket.off("bid_updated");
       socket.off("team_passed");
       socket.off("persistent_pass_updated");
+      socket.off("player_disconnected");
+      socket.off("player_reconnected");
       socket.off("all_teams_passed");
       socket.off("fast_forward");
       socket.off("timer_tick");
@@ -447,6 +472,12 @@ export default function App() {
     socket.emit("toggle_persistent_pass", { enabled, roomCode: room?.code, playerId });
   };
 
+  const handleSetPlayerAutoSkip = (targetTeamId, enabled = null) => {
+    socket.emit("set_player_auto_skip", { targetTeamId, enabled, roomCode: room?.code, playerId }, (res) => {
+      if (res?.error) alert(res.error);
+    });
+  };
+
   const handleSkipPlayer = () => {
     socket.emit("skip_player", { roomCode: room?.code, playerId });
   };
@@ -521,6 +552,7 @@ export default function App() {
         playerId={playerId}
         onToggleRetention={handleToggleRetention}
         onLockRetentions={handleLockRetentions}
+        onSetPlayerAutoSkip={handleSetPlayerAutoSkip}
         onLeaveRoom={handleLeaveRoom}
       />
     );
@@ -557,6 +589,7 @@ export default function App() {
           onPlaceBid={handlePlaceBid}
           onPassTurn={handlePassTurn}
           onTogglePersistentPass={handleTogglePersistentPass}
+          onSetPlayerAutoSkip={handleSetPlayerAutoSkip}
           onSkipPlayer={handleSkipPlayer}
           onSkipPool={handleSkipPool}
           onEndBid={handleEndBid}
@@ -568,6 +601,8 @@ export default function App() {
           <RTMModal
             rtmState={enrichedRtmState}
             playerId={playerId}
+            isHost={myPlayer?.isHost}
+            onSetPlayerAutoSkip={handleSetPlayerAutoSkip}
             onRespondRTM={handleRespondRTM}
           />
         )}

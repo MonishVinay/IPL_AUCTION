@@ -139,6 +139,20 @@ class GameManager {
     player.isConnected = true;
     this.playerSockets.set(socketId, { roomCode: code, playerId });
 
+    this.io.to(code).emit("player_reconnected", {
+      playerId,
+      playerName: player.name,
+      teamId: player.teamId,
+      players: room.players.map((p) => ({
+        id: p.id,
+        name: p.name,
+        isHost: p.isHost,
+        teamId: p.teamId,
+        retentionsLocked: p.retentionsLocked,
+        isConnected: p.isConnected !== false
+      }))
+    });
+
     return {
       success: true,
       roomCode: code,
@@ -736,14 +750,24 @@ class GameManager {
     return false;
   }
 
-  togglePersistentPass(socketId, enabled = null, roomCode = null, playerId = null) {
+  togglePersistentPass(socketId, enabled = null, roomCode = null, playerId = null, targetTeamId = null) {
     const info = this.ensurePlayerInRoom(socketId, roomCode, playerId);
     if (!info) return { error: "Not in room. Please reload to reconnect." };
     const room = this.rooms.get(info.roomCode);
     if (!room) return { error: "Room not found" };
 
     const player = room.players.find((p) => p.id === info.playerId);
-    if (!player || !player.teamId) return { error: "No team assigned" };
+    if (!player) return { error: "Player not found" };
+
+    // If host is toggling for another franchise
+    if (targetTeamId && targetTeamId !== player.teamId) {
+      if (!player.isHost) {
+        return { error: "Only the host can configure auto-skip for other players." };
+      }
+      return this.setPlayerAutoSkip(socketId, targetTeamId, enabled, roomCode, playerId);
+    }
+
+    if (!player.teamId) return { error: "No team assigned" };
 
     const teamId = player.teamId;
     room.persistentPassTeams = room.persistentPassTeams || [];
@@ -778,6 +802,101 @@ class GameManager {
     }
 
     return { success: true, enabled: shouldEnable };
+  }
+
+  setPlayerAutoSkip(socketId, targetTeamId, enabled = null, roomCode = null, playerId = null) {
+    const info = this.ensurePlayerInRoom(socketId, roomCode, playerId);
+    if (!info) return { error: "Not in room. Please reload to reconnect." };
+    const room = this.rooms.get(info.roomCode);
+    if (!room) return { error: "Room not found" };
+
+    const hostPlayer = room.players.find((p) => p.id === info.playerId);
+    if (!hostPlayer || !hostPlayer.isHost) {
+      return { error: "Only the host can set auto-skip for other players." };
+    }
+
+    if (!targetTeamId) {
+      return { error: "Target team ID required." };
+    }
+
+    const targetPlayer = room.players.find((p) => p.teamId === targetTeamId);
+    if (!targetPlayer) {
+      return { error: "Target franchise not found in room." };
+    }
+
+    room.persistentPassTeams = room.persistentPassTeams || [];
+    const isCurrentlyPersistent = room.persistentPassTeams.includes(targetTeamId);
+    const shouldEnable = enabled !== null ? Boolean(enabled) : !isCurrentlyPersistent;
+
+    if (shouldEnable) {
+      if (!room.persistentPassTeams.includes(targetTeamId)) {
+        room.persistentPassTeams.push(targetTeamId);
+      }
+
+      // If currently in AUCTION, pass on current player if not leading bidder
+      if (room.status === "AUCTION" && room.currentPlayer) {
+        if (room.currentBidder !== targetTeamId) {
+          room.passedTeams = room.passedTeams || [];
+          if (!room.passedTeams.includes(targetTeamId)) {
+            room.passedTeams.push(targetTeamId);
+          }
+        }
+      }
+
+      // If in RETENTION phase, auto-lock target player's retentions to unblock auction start
+      if (room.status === "RETENTION") {
+        if (!targetPlayer.retentionsLocked) {
+          targetPlayer.retentionsLocked = true;
+          const teamState = room.teamsState[targetTeamId];
+          if (teamState) {
+            teamState.squad = [...(teamState.retained || [])];
+            teamState.rtmCardsLeft = Math.max(0, room.settings.maxRTM);
+          }
+          this.io.to(room.code).emit("retentions_locked", {
+            playerId: targetPlayer.id,
+            teamId: targetTeamId,
+            retained: teamState?.retained || []
+          });
+          const allLocked = room.players.every((p) => p.retentionsLocked);
+          if (allLocked) {
+            this.buildAuctionPoolsAndStart(room);
+          }
+        }
+      }
+
+      // If in RTM_CHALLENGE and this target team holds the RTM, auto-decline to avoid 12s stall
+      if (room.status === "RTM_CHALLENGE" && room.rtmState && room.rtmState.origTeamId === targetTeamId) {
+        this.clearRoomTimer(room);
+        room.isResolvingSale = true;
+        const rtmChallenge = { ...room.rtmState };
+        room.status = "AUCTION";
+        room.rtmState = null;
+        this.io.to(room.code).emit("rtm_declined", {
+          origTeamId: rtmChallenge.origTeamId,
+          winningTeamId: rtmChallenge.winningTeamId,
+          reason: "Auto-Skipped by Host (AFK)"
+        });
+        this.finalizeSale(room, rtmChallenge.winningTeamId, rtmChallenge.matchAmount, false);
+      }
+    } else {
+      room.persistentPassTeams = room.persistentPassTeams.filter((t) => t !== targetTeamId);
+      if (room.passedTeams) {
+        room.passedTeams = room.passedTeams.filter((t) => t !== targetTeamId);
+      }
+    }
+
+    this.io.to(room.code).emit("persistent_pass_updated", {
+      teamId: targetTeamId,
+      persistentPassTeams: room.persistentPassTeams,
+      passedTeams: room.passedTeams || [],
+      setByHost: true
+    });
+
+    if (shouldEnable && room.status === "AUCTION" && !room.isResolvingSale && !room.lastSale) {
+      this.checkAutoEndBidding(room);
+    }
+
+    return { success: true, enabled: shouldEnable, teamId: targetTeamId };
   }
 
   passTurn(socketId, roomCode = null, playerId = null) {
@@ -882,6 +1001,17 @@ class GameManager {
       origTeamState.rtmCardsLeft > 0 &&
       origTeamState.purse >= room.currentBid
     ) {
+      // If the franchise is set to auto-skip (AFK), auto-decline RTM to avoid stalling the auction for 12 seconds
+      if (room.persistentPassTeams && room.persistentPassTeams.includes(origTeamId)) {
+        this.io.to(room.code).emit("rtm_declined", {
+          origTeamId,
+          winningTeamId,
+          reason: "Auto-Skipped (AFK Manager)"
+        });
+        this.finalizeSale(room, winningTeamId, room.currentBid, false);
+        return;
+      }
+
       this.initiateRTM(room, origTeamId, winningTeamId);
       return;
     }
@@ -1285,7 +1415,16 @@ class GameManager {
       } else {
         this.io.to(room.code).emit("player_disconnected", {
           playerId: player.id,
-          playerName: player.name
+          playerName: player.name,
+          teamId: player.teamId,
+          players: room.players.map((p) => ({
+            id: p.id,
+            name: p.name,
+            isHost: p.isHost,
+            teamId: p.teamId,
+            retentionsLocked: p.retentionsLocked,
+            isConnected: p.isConnected !== false
+          }))
         });
       }
     }

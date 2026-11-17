@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { getTeam } from "../teamsData";
 import { ShieldAlert, Check, X, Clock, Sparkles } from "lucide-react";
 
-export default function RTMModal({ rtmState, playerId, onRespondRTM }) {
+export default function RTMModal({ rtmState, playerId, isHost = false, onSetPlayerAutoSkip, onRespondRTM }) {
   const [submitting, setSubmitting] = useState(false);
 
   if (!rtmState) return null;
@@ -106,10 +106,20 @@ export default function RTMModal({ rtmState, playerId, onRespondRTM }) {
               </div>
             </div>
           ) : (
-            <div className="p-4 bg-slate-950 border border-slate-800 rounded-2xl">
+            <div className="p-4 bg-slate-950 border border-slate-800 rounded-2xl space-y-2.5">
               <p className="text-xs text-slate-400">
                 Waiting for <span className="font-bold text-white">{origTeam.name}</span> ({origTeam.shortName}) to decide whether to trigger their RTM card...
               </p>
+              {isHost && onSetPlayerAutoSkip && (
+                <button
+                  type="button"
+                  onClick={() => onSetPlayerAutoSkip(origTeamId, true)}
+                  className="px-3 py-1.5 bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 text-rose-300 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 mx-auto"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  <span>Host: Auto-Skip AFK Manager</span>
+                </button>
+              )}
             </div>
           )}
         </div>
